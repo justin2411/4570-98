@@ -49,6 +49,23 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
     setSavingDate(false)
   }
 
+  async function saveConsent() {
+    const { error } = await supabase.from('leads').update({
+      consent_given: true,
+      consent_date: new Date().toISOString(),
+      consent_setter_id: userId,
+      consent_text: 'Telefonische Einwilligung erteilt beim Erstkontakt'
+    }).eq('id', lead.id)
+    if (error) { toast.error('Fehler beim Speichern der Einwilligung'); return }
+    setConsentGiven(true)
+    setShowConsentDialog(false)
+    if (pendingStatus) {
+      await saveStatus(pendingStatus)
+      setPendingStatus(null)
+    }
+    toast.success('Einwilligung dokumentiert ✅')
+  }
+
   async function saveStatus(status: LeadStatus) {
     if (loading) return
     setLoading(status)
@@ -150,6 +167,27 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
           </div>
         </div>
       </div>
+      {showConsentDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-bold text-lg text-[#1E3A5F]">⚖️ Einwilligung dokumentieren</h3>
+            <p className="text-sm text-gray-700">Hat die Person der telefonischen Beratung zugestimmt?</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
+              <p className="font-semibold mb-1">Pflichttext nach §7a UWG:</p>
+              <p>"Ich rufe an wegen finanzieller Absicherung für Heilberufler. Darf ich kurz erklären worum es geht, oder soll ich Sie aus der Liste nehmen?"</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={saveConsent} className="flex-1 bg-green-600 text-white py-2 rounded-xl font-semibold text-sm hover:bg-green-700">
+                ✅ Ja, Einwilligung erteilt
+              </button>
+              <button onClick={() => { setShowConsentDialog(false); setPendingStatus(null) }} className="flex-1 bg-red-100 text-red-700 py-2 rounded-xl font-semibold text-sm hover:bg-red-200">
+                ❌ Nein, ablehnt
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 text-center">Datum & Uhrzeit werden automatisch gespeichert</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
