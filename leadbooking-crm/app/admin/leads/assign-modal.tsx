@@ -33,7 +33,7 @@ export function AssignModal({ leadIds, allLeads, setters, adminId, adminName, on
   const [loading, setLoading] = useState(false)
 
   const states = allLeads
-    ? [...new Set(allLeads.filter(l => leadIds.includes(l.id)).map(l => l.state).filter(Boolean))].sort()
+    ? Array.from(new Set(allLeads.filter(l => leadIds.includes(l.id)).map(l => l.state).filter(Boolean))).sort()
     : []
   const [selectedState, setSelectedState] = useState('')
 
