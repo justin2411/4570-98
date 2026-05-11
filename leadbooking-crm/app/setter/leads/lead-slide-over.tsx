@@ -124,6 +124,21 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
         </div>
 
         <div className="px-6 py-4 border-b border-gray-100">
+          {lead.consent_given ? (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-1">
+              <p className="text-xs font-bold text-green-700">✅ Einwilligung dokumentiert</p>
+              <p className="text-xs text-green-600">Datum: {lead.consent_date ? new Date(lead.consent_date).toLocaleString('de-DE') : '–'}</p>
+              <p className="text-xs text-green-600">Text: {lead.consent_text ?? '–'}</p>
+            </div>
+          ) : (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-orange-700">⚠️ Noch keine Einwilligung</p>
+              <p className="text-xs text-orange-600">Beim nächsten Statuswechsel wird sie abgefragt</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Terminzeit</p>
           <div className="grid grid-cols-2 gap-3 mb-2">
             <div>
