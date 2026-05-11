@@ -22,6 +22,24 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  const { data: newProfile } = await admin.from('profiles').select('*').eq('id', newUser.user.id).single()
+  // Warte kurz auf den Trigger
+  await new Promise(r => setTimeout(r, 1000))
+
+  let { data: newProfile } = await admin.from('profiles').select('*').eq('id', newUser.user.id).single()
+
+  // Falls Trigger noch nicht gelaufen – manuell anlegen
+  if (!newProfile) {
+    await admin.from('profiles').insert({
+      id: newUser.user.id,
+      role: 'setter',
+      full_name,
+      email,
+      avatar_color: '#2E75B6',
+      is_active: true,
+    })
+    const { data: p } = await admin.from('profiles').select('*').eq('id', newUser.user.id).single()
+    newProfile = p
+  }
+
   return NextResponse.json({ profile: newProfile })
 }

@@ -2,10 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
-import { StatusBadge } from '@/components/leads/status-badge'
-import { ScoreBadge } from '@/components/leads/score-badge'
-import { Button } from '@/components/ui/button'
+import { Lead, LeadStatus } from '@/types'
 import { X, Phone } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -16,143 +13,141 @@ interface Props {
   onUpdate: (updated: Lead) => void
 }
 
-const STATUS_ORDER: LeadStatus[] = ['neu', 'angerufen', 'nicht_erreicht', 'termin_gelegt', 'termin_stattgefunden', 'kein_interesse']
+const STATUS_ORDER: LeadStatus[] = ['angerufen', 'nicht_erreicht', 'termin_gelegt', 'termin_stattgefunden', 'kein_interesse']
+const STATUS_LABELS: Record<LeadStatus, string> = {
+  neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
+  termin_gelegt: 'Termin gelegt', termin_stattgefunden: 'Termin stattgefunden', kein_interesse: 'Kein Interesse',
+}
 
 export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
   const supabase = createClient()
-  const [loading, setLoading] = useState(false)
-  const [newStatus, setNewStatus] = useState<LeadStatus | null>(null)
-  const [note, setNote] = useState('')
-  const [appointmentDate, setAppointmentDate] = useState('')
-  const [appointmentTime, setAppointmentTime] = useState('')
+  const [loading, setLoading] = useState<LeadStatus | null>(null)
+  const [savingNote, setSavingNote] = useState(false)
+  const [savingDate, setSavingDate] = useState(false)
+  const [notizText, setNotizText] = useState(lead.notes || '')
+  const existing = lead.appointment_date ? new Date(lead.appointment_date) : null
+  const [apptDate, setApptDate] = useState(existing ? existing.toISOString().split('T')[0] : '')
+  const [apptTime, setApptTime] = useState(existing ? existing.toTimeString().slice(0,5) : '')
 
-  async function handleStatusChange(status: LeadStatus) {
-    if (status === 'termin_gelegt') {
-      setNewStatus(status)
-      return
-    }
-    await saveStatus(status)
+  async function saveNote() {
+    setSavingNote(true)
+    const { data, error } = await supabase.from('leads').update({ notes: notizText }).eq('id', lead.id).select().single()
+    if (error) { toast.error('Fehler'); setSavingNote(false); return }
+    toast.success('Notiz gespeichert')
+    onUpdate(data as Lead)
+    setSavingNote(false)
+  }
+
+  async function saveAppointment() {
+    if (!apptDate) { toast.error('Bitte Datum eingeben'); return }
+    setSavingDate(true)
+    const dt = apptTime ? new Date(`${apptDate}T${apptTime}`).toISOString() : new Date(`${apptDate}T00:00`).toISOString()
+    const { data, error } = await supabase.from('leads').update({ appointment_date: dt }).eq('id', lead.id).select().single()
+    if (error) { toast.error('Fehler'); setSavingDate(false); return }
+    toast.success('Termin gespeichert')
+    onUpdate(data as Lead)
+    setSavingDate(false)
   }
 
   async function saveStatus(status: LeadStatus) {
-    setLoading(true)
-    const updates: Partial<Lead> = { status }
-    if (status === 'termin_gelegt' && appointmentDate && appointmentTime) {
-      updates.appointment_date = new Date(`${appointmentDate}T${appointmentTime}`).toISOString()
-    }
-    if (note) updates.notes = note
-
-    const { data, error } = await supabase.from('leads').update(updates).eq('id', lead.id).select().single()
-    if (error) { toast.error('Fehler: ' + error.message); setLoading(false); return }
-
-    await supabase.from('activity_log').insert({
-      lead_id: lead.id, setter_id: userId,
-      old_status: lead.status, new_status: status, note: note || null,
-    })
-
-    toast.success('Status aktualisiert!')
-    onUpdate(data as Lead)
-    setNewStatus(null)
-    setNote('')
-    setLoading(false)
+    if (loading) return
+    setLoading(status)
+    try {
+      const { data, error } = await supabase.from('leads').update({ status }).eq('id', lead.id).select().single()
+      if (error) { toast.error('Fehler: ' + error.message); setLoading(null); return }
+      try {
+        await supabase.from('activity_log').insert({
+          lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: status, note: null,
+        })
+      } catch (_) {}
+      toast.success('Status: ' + STATUS_LABELS[status])
+      onUpdate(data as Lead)
+    } catch (e) { toast.error('Fehler') }
+    setLoading(null)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-md bg-white shadow-xl flex flex-col overflow-y-auto">
-        {/* Header */}
-        <div className="p-5 border-b border-gray-200 flex items-start justify-between">
+      <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto">
+
+        <div className="px-6 py-5 border-b border-gray-200 flex items-start justify-between bg-[#1E3A5F]">
           <div>
-            <h2 className="font-bold text-lg text-[#1E3A5F]">{lead.name}</h2>
-            <div className="flex items-center gap-2 mt-1">
-              <ScoreBadge score={lead.score} />
-              <StatusBadge status={lead.status} />
-            </div>
+            <p className="text-xs font-semibold text-blue-200 uppercase tracking-widest mb-1">Hebamme</p>
+            <h2 className="font-bold text-2xl text-white">{lead.name}</h2>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg mt-1">
+            <X className="w-5 h-5 text-white" />
+          </button>
         </div>
 
-        {/* Details */}
-        <div className="p-5 space-y-3 border-b border-gray-100">
-          <a href={`tel:${lead.phone}`} className="flex items-center gap-3 p-3 bg-[#1E3A5F] text-white rounded-xl hover:bg-[#2E75B6] transition-colors font-medium">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <a href={`tel:${lead.phone}`} className="flex items-center justify-center gap-3 w-full p-3.5 bg-[#2E75B6] text-white rounded-xl hover:bg-[#1E3A5F] transition-colors font-semibold text-lg">
             <Phone className="w-5 h-5" />
-            {lead.phone}
+            +{lead.phone.replace(/^\+/, '')}
           </a>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-gray-500">Bundesland</span><p className="font-medium">{lead.state}</p></div>
-            <div><span className="text-gray-500">Lead-Qualität</span><p className="font-medium">{lead.lead_quality}</p></div>
-            <div><span className="text-gray-500">Alter</span><p className="font-medium">{lead.age_indicator}</p></div>
-            {lead.email && <div><span className="text-gray-500">E-Mail</span><p className="font-medium truncate">{lead.email}</p></div>}
-          </div>
-          {lead.signals && (
-            <div className="text-sm">
-              <span className="text-gray-500 block mb-1">Signale</span>
-              <p className="text-gray-700">{lead.signals}</p>
-            </div>
-          )}
-          {lead.notes && (
-            <div className="text-sm">
-              <span className="text-gray-500 block mb-1">Notiz</span>
-              <p className="text-gray-700">{lead.notes}</p>
-            </div>
-          )}
         </div>
 
-        {/* Status-Buttons */}
-        <div className="p-5 flex-1">
-          <p className="text-sm font-semibold text-gray-500 mb-3">Status ändern:</p>
+        <div className="px-6 py-4 border-b border-gray-100 grid grid-cols-2 gap-x-6 gap-y-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Bundesland</p>
+            <p className="text-sm font-semibold text-gray-900">{lead.state || '–'}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Alter</p>
+            <p className="text-sm font-semibold text-gray-900">{(lead.age_indicator || '–').replace(/[^a-zA-ZäöüÄÖÜß0-9 .,()-]/g, '').trim()}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">E-Mail</p>
+            <p className="text-sm font-semibold text-gray-900 break-all">{lead.email || '–'}</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-b border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Terminzeit</p>
+          <div className="grid grid-cols-2 gap-3 mb-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Datum</label>
+              <input type="date" value={apptDate} onChange={e => setApptDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Uhrzeit</label>
+              <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
+            </div>
+          </div>
+          <button onClick={saveAppointment} disabled={savingDate}
+            className="w-full py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">
+            {savingDate ? 'Speichern...' : 'Termin speichern'}
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-b border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Notiz</p>
+          <textarea value={notizText} onChange={e => setNotizText(e.target.value)} rows={3}
+            placeholder="Notizen zu diesem Lead..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none resize-none" />
+          <button onClick={saveNote} disabled={savingNote}
+            className="mt-2 w-full py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">
+            {savingNote ? 'Speichern...' : 'Notiz speichern'}
+          </button>
+        </div>
+
+        <div className="px-6 py-4 flex-1">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Status ändern</p>
           <div className="space-y-2">
             {STATUS_ORDER.map(s => {
-              const cfg = STATUS_CONFIG[s]
               const isCurrent = lead.status === s
+              const isLoading = loading === s
               return (
-                <button
-                  key={s}
-                  onClick={() => handleStatusChange(s)}
-                  disabled={isCurrent || loading}
-                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all font-medium text-sm ${isCurrent ? 'border-[#2E75B6] bg-blue-50 text-[#2E75B6] cursor-default' : 'border-gray-200 hover:border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50'}`}
-                >
-                  {cfg.emoji} {cfg.label} {isCurrent && '← aktuell'}
+                <button key={s} onClick={() => saveStatus(s)} disabled={isCurrent || loading !== null}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all font-semibold text-sm ${isCurrent ? 'border-[#2E75B6] bg-blue-50 text-[#2E75B6] cursor-default' : 'border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50 disabled:opacity-50'}`}>
+                  {isLoading ? 'Wird gespeichert...' : STATUS_LABELS[s]}{isCurrent && ' — aktuell'}
                 </button>
               )
             })}
           </div>
-
-          {/* Termin-gelegt form */}
-          {newStatus === 'termin_gelegt' && (
-            <div className="mt-4 p-4 bg-yellow-50 rounded-xl border border-yellow-200 space-y-3">
-              <p className="font-semibold text-yellow-800">📅 Termindetails</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Datum *</label>
-                  <input type="date" value={appointmentDate} onChange={e => setAppointmentDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Uhrzeit *</label>
-                  <input type="time" value={appointmentTime} onChange={e => setAppointmentTime(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:outline-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Notiz (optional)</label>
-                <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Besonderheiten, Rückrufzeit..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:outline-none resize-none" />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={() => { if (!appointmentDate || !appointmentTime) { toast.error('Datum und Uhrzeit sind Pflicht!'); return } saveStatus('termin_gelegt') }} loading={loading} size="sm">Speichern</Button>
-                <Button variant="secondary" onClick={() => setNewStatus(null)} size="sm">Abbrechen</Button>
-              </div>
-            </div>
-          )}
-
-          {newStatus && newStatus !== 'termin_gelegt' && (
-            <div className="mt-4 space-y-3">
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Notiz (optional)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2E75B6] focus:outline-none resize-none" />
-              <div className="flex gap-2">
-                <Button onClick={() => saveStatus(newStatus)} loading={loading} size="sm">Speichern</Button>
-                <Button variant="secondary" onClick={() => setNewStatus(null)} size="sm">Abbrechen</Button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -73,7 +73,7 @@ export interface LeaderboardEntry {
 }
 
 export const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bg: string; emoji: string }> = {
-  neu: { label: 'Neu', color: '#9CA3AF', bg: 'bg-gray-100 text-gray-600', emoji: '⚪' },
+  neu: { label: 'Neu', color: '#6366F1', bg: 'bg-indigo-100 text-indigo-700', emoji: '🆕' },
   angerufen: { label: 'Angerufen', color: '#2E75B6', bg: 'bg-blue-100 text-blue-700', emoji: '📞' },
   nicht_erreicht: { label: 'Nicht erreicht', color: '#F97316', bg: 'bg-orange-100 text-orange-700', emoji: '🔁' },
   termin_gelegt: { label: 'Termin gelegt', color: '#EAB308', bg: 'bg-yellow-100 text-yellow-700', emoji: '🟡' },

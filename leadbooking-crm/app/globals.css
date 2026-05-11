@@ -25,3 +25,16 @@ body {
     text-wrap: balance;
   }
 }
+
+::placeholder {
+  color: #6B7280 !important;
+  opacity: 1;
+}
+
+table td, table th, table span, table p {
+  color: #111827;
+}
+
+table td, table th, table span, table p {
+  color: #111827;
+}

@@ -12,7 +12,6 @@ const links = [
   { href: '/admin/leads', label: 'Leads', icon: FileSpreadsheet },
   { href: '/admin/setter', label: 'Setter', icon: UserCog },
   { href: '/admin/rangliste', label: 'Rangliste', icon: Trophy },
-  { href: '/rangliste', label: 'Öffentl. Rangliste', icon: Users },
 ]
 
 export function AdminNav() {

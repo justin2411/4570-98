@@ -46,8 +46,10 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows: RawRow[] = XLSX.utils.sheet_to_json(ws)
 
-    const { data: existing } = await supabase.from('leads').select('phone')
+    const { data: existing } = await supabase.from('leads').select('phone, email, name')
     const existingPhones = new Set((existing ?? []).map(r => String(r.phone)))
+    const existingEmails = new Set((existing ?? []).filter(r => r.email).map(r => String(r.email).toLowerCase()))
+    const existingNames = new Set((existing ?? []).map(r => String(r.name).toLowerCase()))
 
     const leads: ParsedLead[] = rows.filter(r => r.Name && r.Telefon).map(r => {
       const phone = String(r.Telefon ?? '').trim()
@@ -60,7 +62,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
         lead_quality: String(r.Lead ?? '').trim(),
         age_indicator: String(r.Alter ?? '').trim(),
         signals: String(r.Signale ?? '').trim(),
-        isDuplicate: existingPhones.has(phone),
+        isDuplicate: existingPhones.has(phone) || (r['E-Mail'] && existingEmails.has(String(r['E-Mail'] ?? '').trim().toLowerCase())) || existingNames.has(String(r.Name ?? '').trim().toLowerCase()),
       }
     })
     setParsed(leads)
@@ -74,32 +76,27 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     const newLeads = parsed.filter(l => !l.isDuplicate)
     if (newLeads.length === 0) { toast.error('Keine neuen Leads zum Importieren.'); setLoading(false); return }
 
-    let assigned_to: string | null = null
-    if (assignMode === 'setter' && selectedSetter) assigned_to = selectedSetter
-
-    const toInsert = newLeads.map(l => ({
-      ...l, status: 'neu', uploaded_by: adminId,
-      assigned_to: assignMode === 'auto' ? null : assigned_to,
+    const toInsert = newLeads.map(({ isDuplicate: _dup, ...l }) => ({
+      ...l, status: 'neu', uploaded_by: adminId, assigned_to: adminId,
     }))
 
-    const { data, error } = await supabase.from('leads').insert(toInsert).select()
-    if (error) { toast.error('Import fehlgeschlagen: ' + error.message); setLoading(false); return }
-
-    if (assignMode === 'auto' && setters.length > 0 && data) {
-      for (let i = 0; i < data.length; i++) {
-        const setter = setters[i % setters.length]
-        await supabase.from('leads').update({ assigned_to: setter.id }).eq('id', data[i].id)
+    const BATCH = 500
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const batch = toInsert.slice(i, i + BATCH)
+      const { error } = await supabase.from('leads').upsert(batch, { onConflict: 'phone', ignoreDuplicates: true })
+      if (error) {
+        toast.error('Fehler bei Batch ' + (Math.floor(i/BATCH)+1) + ': ' + error.message)
+        setLoading(false)
+        return
       }
-      const { data: updated } = await supabase.from('leads').select('*').in('id', data.map(d => d.id))
-      setImportedLeads(updated ?? [])
-    } else {
-      setImportedLeads(data ?? [])
     }
 
-    toast.success(`${newLeads.length} Leads importiert!`)
+    toast.success(toInsert.length + ' Leads importiert und dir zugewiesen!')
     setLoading(false)
-    onImported(data ?? [])
+    // Seite neu laden damit alle Leads sichtbar sind
+    window.location.reload()
   }
+
 
   const newCount = parsed.filter(l => !l.isDuplicate).length
   const dupCount = parsed.filter(l => l.isDuplicate).length

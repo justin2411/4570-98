@@ -8,10 +8,24 @@ export default async function AdminLeadsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: leads }, { data: setters }] = await Promise.all([
-    supabase.from('leads').select('*, profiles!leads_assigned_to_fkey(full_name, avatar_color)').order('created_at', { ascending: false }),
-    supabase.from('profiles').select('id, full_name, avatar_color').eq('role', 'setter').eq('is_active', true).order('full_name'),
-  ])
+  // Alle Leads in Batches laden
+  let allLeads: Record<string, unknown>[] = []
+  let from = 0
+  const batchSize = 1000
+  while (true) {
+    const { data: batch } = await supabase
+      .from('leads')
+      .select('*, profiles!leads_assigned_to_fkey(full_name, avatar_color)')
+      .order('created_at', { ascending: false })
+      .range(from, from + batchSize - 1)
+    if (!batch || batch.length === 0) break
+    allLeads = [...allLeads, ...batch]
+    if (batch.length < batchSize) break
+    from += batchSize
+  }
 
-  return <AdminLeadsClient initialLeads={leads ?? []} setters={setters ?? []} adminId={user.id} />
+  const { data: setters } = await supabase
+    .from('profiles').select('id, full_name, avatar_color').eq('role', 'setter').eq('is_active', true).order('full_name')
+
+  return <AdminLeadsClient initialLeads={allLeads as never[]} setters={setters ?? []} adminId={user.id} />
 }

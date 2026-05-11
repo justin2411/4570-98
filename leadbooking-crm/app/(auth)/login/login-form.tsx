@@ -1,5 +1,4 @@
 'use client'
-
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -7,14 +6,12 @@ import { Logo } from '@/components/layout/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import toast from 'react-hot-toast'
-
 export function LoginForm() {
   const router = useRouter()
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -24,20 +21,30 @@ export function LoginForm() {
       setLoading(false)
       return
     }
-    const { data: profile } = await supabase.from('profiles').select('role, is_active').eq('id', data.user.id).single()
-    if (!profile?.is_active && profile?.role !== 'admin') {
+    await new Promise(r => setTimeout(r, 500))
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, is_active')
+      .eq('id', data.user.id)
+      .single()
+    if (profileError || !profile) {
+      // Profil nicht lesbar - Middleware übernimmt die Weiterleitung
+      router.push('/dashboard-redirect')
+      router.refresh()
+      return
+    }
+    if (!profile.is_active) {
       await supabase.auth.signOut()
       toast.error('Ihr Konto wurde deaktiviert.')
       setLoading(false)
       return
     }
     toast.success('Erfolgreich angemeldet!')
-    if (profile?.role === 'admin') router.push('/admin')
-    else if (profile?.role === 'setter') router.push('/setter')
+    if (profile.role === 'admin') router.push('/admin')
+    else if (profile.role === 'setter') router.push('/setter')
     else router.push('/advisor')
     router.refresh()
   }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
