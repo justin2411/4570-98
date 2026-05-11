@@ -21,35 +21,15 @@ export default async function ConsentExportPage() {
     from += 1000
   }
 
-  const rows = allLeads.map((l: any) => [
-    l.name, l.phone, l.state,
-    l.consent_given ? 'Ja' : 'Nein',
-    l.consent_date ? new Date(l.consent_date).toLocaleString('de-DE') : '',
-    l.profiles?.full_name ?? '',
-    l.consent_text ?? ''
-  ])
-
-  const csv = [
-    ['Name','Telefon','Bundesland','Einwilligung','Datum','Setter','Text'],
-    ...rows
-  ].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-[#1E3A5F]">Einwilligungsprotokoll</h1>
       <p className="text-gray-600">{allLeads.length} Leads mit Einwilligung</p>
-      
-        href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`}
-        download="einwilligungen.csv"
-        className="inline-block bg-[#1E3A5F] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#2E75B6] transition-colors"
-      >
-        📥 CSV herunterladen
-      </a>
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
-              {['Name','Telefon','Bundesland','Einwilligung','Datum','Setter'].map(h => (
+              {['Name','Telefon','Bundesland','Datum','Setter'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-700">{h}</th>
               ))}
             </tr>
@@ -60,9 +40,6 @@ export default async function ConsentExportPage() {
                 <td className="px-4 py-3 font-medium text-[#1E3A5F]">{l.name}</td>
                 <td className="px-4 py-3 text-gray-700">{l.phone}</td>
                 <td className="px-4 py-3 text-gray-700">{l.state}</td>
-                <td className="px-4 py-3">
-                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">✅ Ja</span>
-                </td>
                 <td className="px-4 py-3 text-gray-700 text-xs">{l.consent_date ? new Date(l.consent_date).toLocaleString('de-DE') : '–'}</td>
                 <td className="px-4 py-3 text-gray-700">{(l.profiles as any)?.full_name ?? '–'}</td>
               </tr>
