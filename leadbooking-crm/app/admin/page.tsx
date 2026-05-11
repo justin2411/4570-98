@@ -47,7 +47,7 @@ export default async function AdminDashboard() {
   // Pro Lead nur den neuesten Eintrag, dann nach Setter gruppieren
   const seenLeads = new Set<string>()
   const filtered = (recentActivity ?? []).filter(log => {
-    const key = `${log.setter_id}-${(log.leads as { name: string } | null)?.name}`
+    const key = `${log.setter_id}-${(log.leads as unknown as { name: string } | null)?.name}`
     if (seenLeads.has(key)) return false
     seenLeads.add(key)
     return true
