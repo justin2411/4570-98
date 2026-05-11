@@ -161,7 +161,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
               const isCurrent = lead.status === s
               const isLoading = loading === s
               return (
-                <button key={s} onClick={() => saveStatus(s)} disabled={isCurrent || loading !== null}
+                <button key={s} onClick={() => { if (!consentGiven) { setPendingStatus(s); setShowConsentDialog(true) } else { saveStatus(s) } }} disabled={isCurrent || loading !== null}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all font-semibold text-sm ${isCurrent ? 'border-[#2E75B6] bg-blue-50 text-[#2E75B6] cursor-default' : 'border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50 disabled:opacity-50'}`}>
                   {isLoading ? 'Wird gespeichert...' : STATUS_LABELS[s]}{isCurrent && ' — aktuell'}
                 </button>
