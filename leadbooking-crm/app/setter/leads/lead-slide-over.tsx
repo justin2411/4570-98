@@ -28,6 +28,9 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
   const existing = lead.appointment_date ? new Date(lead.appointment_date) : null
   const [apptDate, setApptDate] = useState(existing ? existing.toISOString().split('T')[0] : '')
   const [apptTime, setApptTime] = useState(existing ? existing.toTimeString().slice(0,5) : '')
+  const [showConsentDialog, setShowConsentDialog] = useState(false)
+  const [consentGiven, setConsentGiven] = useState(lead.consent_given ?? false)
+  const [pendingStatus, setPendingStatus] = useState<LeadStatus | null>(null)
 
   async function saveNote() {
     setSavingNote(true)
