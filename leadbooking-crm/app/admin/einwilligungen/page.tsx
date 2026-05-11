@@ -25,6 +25,9 @@ export default async function ConsentExportPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-[#1E3A5F]">Einwilligungsprotokoll</h1>
       <p className="text-gray-600">{allLeads.length} Leads mit Einwilligung</p>
+      <a href="/admin/einwilligungen/download" className="inline-block bg-[#1E3A5F] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#2E75B6] transition-colors">
+        📥 CSV herunterladen (§7a UWG Protokoll)
+      </a>
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
