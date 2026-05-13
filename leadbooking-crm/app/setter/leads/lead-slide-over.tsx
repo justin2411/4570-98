@@ -92,16 +92,19 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250)
   }
 
-  // SYNCHRON! Kein async/await - iOS Safari blockt sonst den tel:-Link
-  // als "automatischen Anruf". RPC laeuft fire-and-forget im Hintergrund.
+  // iOS Safari Block-Fix: KEIN State-Update im Click-Handler.
+  // Wir verzoegern alles um 200ms damit die tel:-Navigation komplett
+  // durchlaeuft, bevor React irgendwas anfasst. Sonst sieht iOS das
+  // als "Seite verzoegert den Anruf" und blockt.
   function handleCallClick() {
-    const newCount = (lead.call_attempts ?? 0) + 1
-    const now = new Date().toISOString()
-    onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
-    // Fire and forget - blockiert NICHT die tel:-Navigation
-    supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
-      .then(({ data }) => { if (data) onUpdate(data as Lead) })
-      .catch(() => {})
+    setTimeout(() => {
+      const newCount = (lead.call_attempts ?? 0) + 1
+      const now = new Date().toISOString()
+      onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
+      supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
+        .then(({ data }) => { if (data) onUpdate(data as Lead) })
+        .catch(() => {})
+    }, 200)
   }
 
   async function saveNote() {
