@@ -35,6 +35,8 @@ export interface Lead {
   appointment_date: string | null
   recall_date: string | null
   notes: string | null
+  call_attempts: number
+  last_call_attempt: string | null
   created_at: string
   updated_at: string
   profiles?: Profile

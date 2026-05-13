@@ -1,52 +1,76 @@
 import { createServerClient } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
+
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request })
+  let supabaseResponse = NextResponse.next({ request })
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() { return request.cookies.getAll() },
-        setAll(toSet) {
-          toSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({ request })
-          toSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
         },
       },
     }
   )
+
   const { data: { user } } = await supabase.auth.getUser()
-  const { pathname } = request.nextUrl
 
-  // Public routes - kein Login nötig
-  if (pathname.startsWith('/rangliste')) return response
-  if (pathname.startsWith('/login') || pathname.startsWith('/passwort-reset')) {
-    if (user) return NextResponse.redirect(new URL('/dashboard-redirect', request.url))
-    return response
+  const path = request.nextUrl.pathname
+  const isAuthPage = path.startsWith('/login') || path.startsWith('/passwort-reset')
+  const isPublicAsset = path === '/' || path.startsWith('/_next') || path === '/manifest.json' || path === '/sw.js' || path === '/favicon.ico' || path.startsWith('/icons') || path.startsWith('/api/auth')
+  const isProtected = path.startsWith('/admin') || path.startsWith('/setter') || path.startsWith('/advisor') || path.startsWith('/dashboard-redirect') || path.startsWith('/rangliste')
+
+  // Nicht eingeloggt + geschützte Route → /login
+  if (!user && isProtected) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
-  // Nicht eingeloggt → zum Login
-  if (!user) return NextResponse.redirect(new URL('/login', request.url))
+  // Eingeloggt + geschützte Route → is_active prüfen
+  if (user && isProtected && !isAuthPage && !isPublicAsset) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_active, role')
+      .eq('id', user.id)
+      .single()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, is_active')
-    .eq('id', user.id)
-    .single()
-
-  // Kein Profil gefunden → trotzdem durchlassen (verhindert Redirect-Loop)
-  if (!profile) return response
-
-  if (pathname.startsWith('/admin') && profile.role !== 'admin') {
-    return NextResponse.redirect(new URL(profile.role === 'setter' ? '/setter' : '/advisor', request.url))
+    if (!profile || profile.is_active === false) {
+      // Account deaktiviert → ausloggen + zur Login-Seite
+      await supabase.auth.signOut()
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      url.searchParams.set('error', 'deactivated')
+      return NextResponse.redirect(url)
+    }
   }
-  if (pathname.startsWith('/setter') && profile.role !== 'setter') {
-    return NextResponse.redirect(new URL(profile.role === 'admin' ? '/admin' : '/advisor', request.url))
+
+  // Eingeloggt + auf /login → zum passenden Dashboard
+  if (user && isAuthPage) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile) {
+      const url = request.nextUrl.clone()
+      url.pathname = profile.role === 'admin' ? '/admin' : profile.role === 'advisor' ? '/advisor' : '/setter'
+      return NextResponse.redirect(url)
+    }
   }
-  return response
+
+  return supabaseResponse
 }
+
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2|ttf)$).*)',
+  ],
 }

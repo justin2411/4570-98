@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus } from '@/types'
 import { LeadSlideOver } from './lead-slide-over'
-import { Search, X } from 'lucide-react'
+import { Search, X, Phone } from 'lucide-react'
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
@@ -36,8 +36,6 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
   const [search, setSearch] = useState('')
-
-  // Navigation: Liste der IDs in der aktuellen gefilterten Reihenfolge + aktuelle Position
   const [navList, setNavList] = useState<string[]>([])
   const [navIdx, setNavIdx] = useState<number | null>(null)
 
@@ -61,45 +59,33 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   )
 
   function openLead(idx: number) {
-    // Beim Öffnen: Navigations-Liste auf die aktuell gefilterte Reihenfolge einfrieren
     setNavList(filtered.map(l => l.id))
     setNavIdx(idx)
   }
-
   function closeSlideOver() { setNavIdx(null); setNavList([]) }
-
   function goNext() {
     if (navIdx === null) return
     if (navIdx + 1 >= navList.length) { closeSlideOver(); return }
     setNavIdx(navIdx + 1)
   }
-
   function goPrev() {
     if (navIdx === null) return
     if (navIdx - 1 < 0) return
     setNavIdx(navIdx - 1)
   }
 
-  // Aktuell ausgewählter Lead via ID-Lookup (überlebt Status-Wechsel)
   const currentLeadId = navIdx !== null ? navList[navIdx] : null
   const currentLead = currentLeadId ? leads.find(l => l.id === currentLeadId) ?? null : null
 
   return (
     <div className="space-y-4">
-      {/* Suchfeld */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Suche nach Name oder Telefonnummer..."
-          className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
-        />
+          className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none" />
         {search && (
-          <button onClick={() => setSearch('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
-            aria-label="Suche löschen">
+          <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full" aria-label="Suche löschen">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         )}
@@ -128,6 +114,12 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-bold text-gray-900 text-[15px] truncate">{lead.name}</span>
                 <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">Hebamme</span>
+                {(lead.call_attempts ?? 0) > 0 && (
+                  <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200 px-1.5 py-0.5 rounded-full" title="Anrufversuche">
+                    <Phone className="w-2.5 h-2.5" />
+                    {lead.call_attempts}×
+                  </span>
+                )}
               </div>
               <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_COLORS[lead.status]}`}>{STATUS_LABELS[lead.status]}</span>
             </div>

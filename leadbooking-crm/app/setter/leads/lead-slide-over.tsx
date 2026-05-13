@@ -11,7 +11,6 @@ interface Props {
   userId: string
   onClose: () => void
   onUpdate: (updated: Lead) => void
-  // Navigation (optional)
   onNext?: () => void
   onPrev?: () => void
   position?: { current: number; total: number }
@@ -20,9 +19,18 @@ interface Props {
 const STATUS_ORDER: LeadStatus[] = ['angerufen', 'nicht_erreicht', 'wiedervorlage', 'termin_gelegt', 'termin_stattgefunden', 'kein_interesse']
 
 function defaultRecallDate() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
+  const d = new Date(); d.setDate(d.getDate() + 1)
   return d.toISOString().split('T')[0]
+}
+
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso); const now = new Date()
+  const diff = (now.getTime() - d.getTime()) / 1000
+  if (diff < 60) return 'gerade eben'
+  if (diff < 3600) return 'vor ' + Math.floor(diff/60) + ' Min'
+  if (diff < 86400) return 'vor ' + Math.floor(diff/3600) + ' Std'
+  return 'vor ' + Math.floor(diff/86400) + ' Tagen'
 }
 
 export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev, position }: Props) {
@@ -43,7 +51,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
 
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Wenn der Lead wechselt (nach Next/Prev): Felder neu befüllen
   useEffect(() => {
     setNotizText(lead.notes || '')
     const e = lead.appointment_date ? new Date(lead.appointment_date) : null
@@ -52,16 +59,14 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     const r = lead.recall_date ? new Date(lead.recall_date) : null
     setRecallDate(r ? r.toISOString().split('T')[0] : defaultRecallDate())
     setRecallTime(r ? r.toTimeString().slice(0,5) : '10:00')
-    setShowRecallDialog(false)
-    setLoading(null)
+    setShowRecallDialog(false); setLoading(null)
   }, [lead.id])
 
-  // Tastatur-Shortcuts: Esc=schließen, ←/→ = Navigieren
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (showRecallDialog) return // Im Dialog keine Shortcuts
+      if (showRecallDialog) return
       const target = e.target as HTMLElement
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return // Nicht beim Tippen
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return
       if (e.key === 'Escape') onClose()
       if (e.key === 'ArrowRight' && onNext) onNext()
       if (e.key === 'ArrowLeft' && onPrev) onPrev()
@@ -73,19 +78,28 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
   useEffect(() => () => { if (advanceTimer.current) clearTimeout(advanceTimer.current) }, [])
 
   function advanceOrClose() {
-    advanceTimer.current = setTimeout(() => {
-      if (onNext) onNext()
-      else onClose()
-    }, 250)
+    advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250)
+  }
+
+  // Click-to-Call: atomar in DB inkrementieren beim Tippen
+  async function handleCallClick() {
+    // Optimistic update damit Counter sofort hochgeht
+    const newCount = (lead.call_attempts ?? 0) + 1
+    const now = new Date().toISOString()
+    onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
+    // Persist via RPC (atomar)
+    try {
+      const { data } = await supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
+      if (data) onUpdate(data as Lead)
+    } catch (_) { /* nicht blockieren */ }
+    // tel: Link triggert sich selbst über die <a>
   }
 
   async function saveNote() {
     setSavingNote(true)
     const { data, error } = await supabase.from('leads').update({ notes: notizText }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler'); setSavingNote(false); return }
-    toast.success('Notiz gespeichert')
-    onUpdate(data as Lead)
-    setSavingNote(false)
+    toast.success('Notiz gespeichert'); onUpdate(data as Lead); setSavingNote(false)
   }
 
   async function saveAppointment() {
@@ -94,40 +108,28 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     const dt = apptTime ? new Date(`${apptDate}T${apptTime}`).toISOString() : new Date(`${apptDate}T00:00`).toISOString()
     const { data, error } = await supabase.from('leads').update({ appointment_date: dt }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler'); setSavingDate(false); return }
-    toast.success('Termin gespeichert')
-    onUpdate(data as Lead)
-    setSavingDate(false)
+    toast.success('Termin gespeichert'); onUpdate(data as Lead); setSavingDate(false)
   }
 
   async function clearAppointment() {
     setSavingDate(true)
     const { data, error } = await supabase.from('leads').update({ appointment_date: null }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler'); setSavingDate(false); return }
-    toast.success('Termin entfernt')
-    setApptDate(''); setApptTime('')
-    onUpdate(data as Lead)
-    setSavingDate(false)
+    toast.success('Termin entfernt'); setApptDate(''); setApptTime(''); onUpdate(data as Lead); setSavingDate(false)
   }
 
   async function clearRecall() {
     setSavingRecall(true)
-    const { data, error } = await supabase.from('leads')
-      .update({ recall_date: null }).eq('id', lead.id).select().single()
+    const { data, error } = await supabase.from('leads').update({ recall_date: null }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler'); setSavingRecall(false); return }
-    toast.success('Wiedervorlage entfernt')
-    onUpdate(data as Lead)
-    setShowRecallDialog(false)
-    setSavingRecall(false)
+    toast.success('Wiedervorlage entfernt'); onUpdate(data as Lead); setShowRecallDialog(false); setSavingRecall(false)
   }
 
   async function saveRecall() {
     if (!recallDate) { toast.error('Bitte Datum eingeben'); return }
     setSavingRecall(true)
     const dt = new Date(`${recallDate}T${recallTime || '10:00'}`).toISOString()
-    const { data, error } = await supabase.from('leads').update({
-      status: 'wiedervorlage',
-      recall_date: dt,
-    }).eq('id', lead.id).select().single()
+    const { data, error } = await supabase.from('leads').update({ status: 'wiedervorlage', recall_date: dt }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler: ' + error.message); setSavingRecall(false); return }
     try {
       await supabase.from('activity_log').insert({
@@ -136,9 +138,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
       })
     } catch (_) {}
     toast.success('Wiedervorlage geplant ⏰')
-    onUpdate(data as Lead)
-    setShowRecallDialog(false)
-    setSavingRecall(false)
+    onUpdate(data as Lead); setShowRecallDialog(false); setSavingRecall(false)
     advanceOrClose()
   }
 
@@ -155,19 +155,17 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
         })
       } catch (_) {}
       toast.success('✓ ' + STATUS_CONFIG[status].label)
-      onUpdate(data as Lead)
-      advanceOrClose()
-    } catch (e) { toast.error('Fehler'); setLoading(null) }
+      onUpdate(data as Lead); advanceOrClose()
+    } catch (_) { toast.error('Fehler'); setLoading(null) }
   }
 
   const hasAppointment = !!(apptDate || lead.appointment_date)
+  const callCount = lead.call_attempts ?? 0
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop nur auf Desktop sichtbar */}
       <div className="hidden md:block flex-1 bg-black/40" onClick={onClose} />
 
-      {/* Panel: Mobile = Vollbild, Desktop = Slide-over rechts */}
       <div className="w-full md:max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto"
            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
@@ -195,13 +193,19 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
           </button>
         </div>
 
-        {/* ANRUFEN */}
+        {/* ANRUFEN mit Counter */}
         <div className="px-5 py-3 border-b border-gray-100">
-          <a href={`tel:${lead.phone}`}
+          <a href={`tel:${lead.phone}`} onClick={handleCallClick}
              className="flex items-center justify-center gap-3 w-full min-h-[52px] p-3.5 bg-[#2E75B6] text-white rounded-xl hover:bg-[#1E3A5F] active:scale-[0.98] transition-all font-semibold text-lg shadow-sm">
             <Phone className="w-5 h-5" />
             <span className="tracking-wide">+{lead.phone.replace(/^\+/, '')}</span>
           </a>
+          {callCount > 0 && (
+            <p className="text-[11px] text-gray-500 mt-1.5 text-center">
+              <span className="font-semibold text-gray-700">{callCount}×</span> angerufen
+              {lead.last_call_attempt && <> · zuletzt {formatRelative(lead.last_call_attempt)}</>}
+            </p>
+          )}
         </div>
 
         {/* INFO-GRID */}
@@ -255,8 +259,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
             </button>
             {hasAppointment && (
               <button onClick={clearAppointment} disabled={savingDate}
-                className="min-h-[44px] px-3 rounded-xl bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 transition-colors disabled:opacity-50"
-                aria-label="Termin entfernen" title="Termin entfernen">
+                className="min-h-[44px] px-3 rounded-xl bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 transition-colors disabled:opacity-50" aria-label="Termin entfernen">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -289,9 +292,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
               return (
                 <button key={s} onClick={() => saveStatus(s)} disabled={loading !== null}
                   className={`w-full min-h-[52px] text-left px-4 py-3 rounded-xl border-2 transition-all font-semibold text-sm flex items-center gap-3 active:scale-[0.98] ${
-                    isCurrent
-                      ? `${cfg.bg} border-current`
-                      : 'bg-white border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50'
+                    isCurrent ? `${cfg.bg} border-current` : 'bg-white border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50'
                   } disabled:opacity-50`}>
                   <span className="text-xl shrink-0">{cfg.emoji}</span>
                   <span className="flex-1">{isLoading ? 'Wird gespeichert...' : cfg.label}</span>
@@ -301,7 +302,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
             })}
           </div>
 
-          {/* Überspringen (ohne Statuswechsel weiterspringen) */}
           {onNext && (
             <button onClick={onNext}
               className="mt-3 w-full min-h-[44px] py-2.5 rounded-xl bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100 text-sm font-medium text-gray-600 transition-colors flex items-center justify-center gap-2">
@@ -312,7 +312,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
         </div>
       </div>
 
-      {/* WIEDERVORLAGE-DIALOG */}
       {showRecallDialog && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
