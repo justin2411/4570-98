@@ -1,14 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Avatar } from '@/components/ui/avatar'
-import { TrendingUp, TrendingDown, Minus, Crown, Info } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Crown, Info, RefreshCw } from 'lucide-react'
 
 // ============================================================
 // TIER SYSTEM
 // Basis: Lifetime "termin_gelegt" Summe aus leaderboard_cache
-// Schwellen können hier angepasst werden:
 // ============================================================
 type Tier = { name: string; emoji: string; min: number; cls: string }
 const TIERS: Tier[] = [
@@ -22,7 +21,6 @@ const TIERS: Tier[] = [
 function calcTier(lifetimeSet: number): Tier {
   return TIERS.find(t => lifetimeSet >= t.min) ?? TIERS[TIERS.length - 1]
 }
-// Legend von Bronze (niedrigster) bis VIP (höchster) ordnen
 const TIERS_ASC = [...TIERS].reverse()
 function tierRange(t: Tier): string {
   const next = TIERS.find(x => x.min > t.min)
@@ -64,6 +62,8 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
   const [yMap, setYMap] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [showLegend, setShowLegend] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   async function load(p: Period) {
     setLoading(true)
@@ -98,9 +98,11 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
       const e = map.get(row.setter_id)
       if (!e) continue
 
+      // Lifetime = Summe aller Tage (NIE überschreiben, nur addieren)
       e.lifetime_set += row.appointments_set
       e.lifetime_done += row.appointments_done
 
+      // Period = nur Tage im Zeitraum
       if (from === null || row.date >= from) {
         e.calls_made += row.calls_made
         e.appointments_set += row.appointments_set
@@ -119,15 +121,28 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
       return a.full_name.localeCompare(b.full_name)
     })
     setEntries(arr)
+    setLastUpdate(new Date())
     setLoading(false)
+  }
+
+  function triggerReload() {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    // 800ms debounce, damit der DB-Trigger nach dem activity_log INSERT
+    // genug Zeit hat, leaderboard_cache zu aktualisieren
+    debounceRef.current = setTimeout(() => load(period), 800)
   }
 
   useEffect(() => {
     load(period)
-    const ch = supabase.channel('lb-cache')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard_cache' }, () => load(period))
+    // Realtime auf BEIDE Tabellen lauschen - mehr Sicherheit
+    const ch = supabase.channel('lb-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard_cache' }, triggerReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, triggerReload)
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      supabase.removeChannel(ch)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period])
 
@@ -151,6 +166,11 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
             {p.label}
           </button>
         ))}
+        <button onClick={() => load(period)} title="Manuell aktualisieren"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          {lastUpdate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </button>
         <button onClick={() => setShowLegend(v => !v)}
           className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
           <Info className="w-3.5 h-3.5" />
@@ -158,7 +178,6 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
         </button>
       </div>
 
-      {/* TIER-LEGENDE (ausklappbar) */}
       {showLegend && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">🏅 Tier-System · Basis: gelegte Termine lebenslang</p>
@@ -262,7 +281,7 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
             </tbody>
           </table>
           <p className="px-4 py-2 text-[10px] text-gray-400 bg-gray-50 border-t border-gray-100">
-            Lifetime = gelegte / stattgefundene Termine seit Account-Erstellung · Trend = Vergleich Stattgef. heute vs. gestern
+            Lifetime = gelegte / stattgefundene Termine seit Account-Erstellung · Werte werden nicht überschrieben, nur durch neue Tage erweitert
           </p>
         </div>
       )}
