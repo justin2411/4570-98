@@ -92,14 +92,16 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250)
   }
 
-  async function handleCallClick() {
+  // SYNCHRON! Kein async/await - iOS Safari blockt sonst den tel:-Link
+  // als "automatischen Anruf". RPC laeuft fire-and-forget im Hintergrund.
+  function handleCallClick() {
     const newCount = (lead.call_attempts ?? 0) + 1
     const now = new Date().toISOString()
     onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
-    try {
-      const { data } = await supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
-      if (data) onUpdate(data as Lead)
-    } catch (_) {}
+    // Fire and forget - blockiert NICHT die tel:-Navigation
+    supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
+      .then(({ data }) => { if (data) onUpdate(data as Lead) })
+      .catch(() => {})
   }
 
   async function saveNote() {
