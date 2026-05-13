@@ -1,15 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { StatusBadge } from '@/components/leads/status-badge'
 import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
 import { Button } from '@/components/ui/button'
-import { Upload } from 'lucide-react'
+import { Upload, Search, X } from 'lucide-react'
 
 interface Setter { id: string; full_name: string; avatar_color: string }
 interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string }
+
+// Suchhilfe: tolerant bei Telefonnummern + Teiltreffer bei Name/E-Mail
+function matchesSearch(lead: Lead, q: string): boolean {
+  const qt = q.trim().toLowerCase()
+  if (!qt) return true
+  if (lead.name?.toLowerCase().includes(qt)) return true
+  if (lead.email?.toLowerCase().includes(qt)) return true
+  const phoneDigits = (lead.phone ?? '').replace(/\D/g, '')
+  const qDigits = qt.replace(/\D/g, '')
+  if (qDigits && phoneDigits.includes(qDigits)) return true
+  return false
+}
 
 export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
@@ -18,6 +30,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [assignTarget, setAssignTarget] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>('unassigned')
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
+  const [search, setSearch] = useState('')
 
   const unassigned = leads.filter(l => !l.assigned_to)
   const adminLeads = leads.filter(l => l.assigned_to === adminId)
@@ -27,23 +40,25 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     ...setters.map(s => ({ id: s.id, label: s.full_name, count: leads.filter(l => l.assigned_to === s.id).length })),
   ]
 
+  // 1) Tab → 2) Suche → 3) Status-Filter
   const tabLeads = activeTab === 'unassigned' ? unassigned : leads.filter(l => l.assigned_to === activeTab)
-  const filtered = statusFilter === 'alle' ? tabLeads : tabLeads.filter(l => l.status === statusFilter)
+  const searched = useMemo(() => tabLeads.filter(l => matchesSearch(l, search)), [tabLeads, search])
+  const filtered = statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter)
 
-  function selectAllInTab() { setSelected(new Set(tabLeads.map(l => l.id))) }
+  function selectAllInFiltered() { setSelected(new Set(filtered.map(l => l.id))) }
   function toggleSelect(id: string) {
     setSelected(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s })
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#1E3A5F]">Leads verwalten</h1>
           <p className="text-gray-700 text-sm mt-1">{leads.length} Leads gesamt</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={selectAllInTab} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 hover:bg-gray-50">Alle in Tab ({tabLeads.length})</button>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={selectAllInFiltered} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 hover:bg-gray-50">Alle sichtbaren ({filtered.length})</button>
           {selected.size > 0 && (
             <Button variant="secondary" onClick={() => setAssignTarget(Array.from(selected))}>
               {selected.size} zuweisen
@@ -53,6 +68,32 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         </div>
       </div>
 
+      {/* Suchfeld */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Suche nach Name, Telefonnummer oder E-Mail..."
+          className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
+        />
+        {search && (
+          <button onClick={() => setSearch('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Suche löschen">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        )}
+      </div>
+
+      {search && (
+        <p className="text-xs text-gray-600">
+          {searched.length === 0 ? 'Keine Treffer' : searched.length === 1 ? '1 Treffer' : `${searched.length} Treffer`} für „<span className="font-semibold">{search}</span>" im aktuellen Tab
+        </p>
+      )}
+
+      {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {tabs.map(t => (
           <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(new Set()); setStatusFilter('alle') }}
@@ -63,12 +104,13 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         ))}
       </div>
 
+      {/* Status-Filter (Anzahl basiert auf gesuchten Leads) */}
       <div className="flex flex-wrap gap-2 p-4 bg-white rounded-xl border border-gray-200">
         <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
-          Alle ({tabLeads.length})
+          Alle ({searched.length})
         </button>
         {(Object.keys(STATUS_CONFIG) as LeadStatus[]).map(s => {
-          const count = tabLeads.filter(l => l.status === s).length
+          const count = searched.filter(l => l.status === s).length
           if (count === 0) return null
           return (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === s ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
@@ -85,7 +127,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
               <div className="flex items-center gap-2 mb-1">
                 <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="mr-1" />
                 <span className="font-bold text-gray-900 text-[15px]">{lead.name}</span>
-                
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <StatusBadge status={lead.status} />
@@ -103,7 +144,11 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
             </div>
           </div>
         ))}
-        {filtered.length === 0 && <p className="text-center py-10 text-gray-700">Keine Leads</p>}
+        {filtered.length === 0 && (
+          <p className="text-center py-10 text-gray-700">
+            {search ? 'Kein Lead passt zu deiner Suche' : 'Keine Leads'}
+          </p>
+        )}
       </div>
 
       {showUpload && <ExcelUpload adminId={adminId} setters={setters} onClose={() => setShowUpload(false)} onImported={newLeads => { setLeads(prev => [...newLeads, ...prev]); setShowUpload(false) }} />}

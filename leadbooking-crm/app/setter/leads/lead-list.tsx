@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus } from '@/types'
 import { LeadSlideOver } from './lead-slide-over'
+import { Search, X } from 'lucide-react'
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
@@ -19,11 +20,24 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
 }
 const ALL_STATUSES: LeadStatus[] = ['neu','angerufen','nicht_erreicht','wiedervorlage','termin_gelegt','termin_stattgefunden','kein_interesse']
 
+// Suchhilfe: tolerant bei Telefonnummern + Teiltreffer bei Name/E-Mail
+function matchesSearch(lead: Lead, q: string): boolean {
+  const qt = q.trim().toLowerCase()
+  if (!qt) return true
+  if (lead.name?.toLowerCase().includes(qt)) return true
+  if (lead.email?.toLowerCase().includes(qt)) return true
+  const phoneDigits = (lead.phone ?? '').replace(/\D/g, '')
+  const qDigits = qt.replace(/\D/g, '')
+  if (qDigits && phoneDigits.includes(qDigits)) return true
+  return false
+}
+
 export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userId: string }) {
   const supabase = createClient()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [selected, setSelected] = useState<Lead | null>(null)
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const ch = supabase.channel('leads').on('postgres_changes',
@@ -37,18 +51,47 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
     return () => { supabase.removeChannel(ch) }
   }, [userId])
 
-  const filtered = statusFilter === 'alle' ? leads : leads.filter(l => l.status === statusFilter)
+  // 1) Suche → 2) Status-Filter
+  const searched = useMemo(() => leads.filter(l => matchesSearch(l, search)), [leads, search])
+  const filtered = statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter)
 
   return (
     <div className="space-y-4">
+      {/* Suchfeld */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Suche nach Name oder Telefonnummer..."
+          className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
+        />
+        {search && (
+          <button onClick={() => setSearch('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Suche löschen">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        )}
+      </div>
+
+      {search && (
+        <p className="text-xs text-gray-600">
+          {searched.length === 0 ? 'Keine Treffer' : searched.length === 1 ? '1 Treffer' : `${searched.length} Treffer`} für „<span className="font-semibold">{search}</span>"
+        </p>
+      )}
+
+      {/* Status-Filter (Anzahl basiert auf Suchergebnissen) */}
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>Alle ({leads.length})</button>
+        <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>Alle ({searched.length})</button>
         {ALL_STATUSES.map(s => {
-          const count = leads.filter(l => l.status === s).length
+          const count = searched.filter(l => l.status === s).length
           if (count === 0) return null
           return <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === s ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>{STATUS_LABELS[s]} ({count})</button>
         })}
       </div>
+
       <div className="space-y-2">
         {filtered.map(lead => (
           <button key={lead.id} onClick={() => setSelected(lead)} className="w-full text-left bg-white border border-gray-200 rounded-2xl px-5 py-4 hover:border-[#2E75B6] hover:shadow-md transition-all">
@@ -70,7 +113,11 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
             )}
           </button>
         ))}
-        {filtered.length === 0 && <p className="text-center text-gray-500 py-12">Keine Leads gefunden</p>}
+        {filtered.length === 0 && (
+          <p className="text-center text-gray-500 py-12">
+            {search ? 'Kein Lead passt zu deiner Suche' : 'Keine Leads gefunden'}
+          </p>
+        )}
       </div>
       {selected && <LeadSlideOver lead={selected} userId={userId} onClose={() => setSelected(null)} onUpdate={updated => setLeads(prev => prev.map(l => l.id === updated.id ? updated : l))} />}
     </div>
