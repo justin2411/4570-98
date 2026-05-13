@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Phone, Calendar, CheckCircle, TrendingUp, Flame } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
-import { SetterLeaderboard } from './leaderboard'
+import { LeaderboardTable } from '@/components/leaderboard/table'
 
 interface Stats { calls: number; set: number }
 
@@ -63,7 +63,12 @@ export function DashboardClient({ fullName, totalDone, totalSet, streak, stats, 
         </div>
       )}
 
-      <SetterLeaderboard currentSetterId={currentSetterId} />
+      <section>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+          🏆 Rangliste
+        </h2>
+        <LeaderboardTable highlightId={currentSetterId} />
+      </section>
     </div>
   )
 }
