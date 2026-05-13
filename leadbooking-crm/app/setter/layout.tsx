@@ -1,16 +1,10 @@
 export const dynamic = 'force-dynamic'
 import { SetterNav } from '@/components/layout/setter-nav'
-import { NotificationsProvider } from '@/components/notifications-provider'
-import { createClient } from '@/lib/supabase/server'
 
-export default async function SetterLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
+export default function SetterLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <SetterNav />
-      {user && <NotificationsProvider userId={user.id} />}
       <main
         className={[
           // Desktop: sidebar links, kein top/bottom padding

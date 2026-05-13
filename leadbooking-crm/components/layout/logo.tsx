@@ -7,7 +7,7 @@ export function Logo({
 }: {
   light?: boolean
   className?: string
-  /** Wenn true: auf Handys nur Icon + "LBCRM", auf Desktop voller Name */
+  /** Wenn true: auf Handys nur "LBCRM", auf Desktop voller Name */
   mobileCompact?: boolean
 }) {
   return (
@@ -15,22 +15,16 @@ export function Logo({
       <div className="w-8 h-8 bg-[#2E75B6] rounded-lg flex items-center justify-center shrink-0">
         <span className="text-white font-bold text-sm">LC</span>
       </div>
-      <span
-        className={cn(
-          'font-bold text-lg whitespace-nowrap',
-          light ? 'text-white' : 'text-[#1E3A5F]',
-          mobileCompact && 'hidden xs:inline sm:inline'
-        )}
-      >
-        {mobileCompact ? (
-          <>
-            <span className="sm:hidden">LBCRM</span>
-            <span className="hidden sm:inline">Leadbooking CRM</span>
-          </>
-        ) : (
-          'Leadbooking CRM'
-        )}
-      </span>
+      {mobileCompact ? (
+        <span className={cn('font-bold text-lg whitespace-nowrap', light ? 'text-white' : 'text-[#1E3A5F]')}>
+          <span className="sm:hidden">LBCRM</span>
+          <span className="hidden sm:inline">Leadbooking CRM</span>
+        </span>
+      ) : (
+        <span className={cn('font-bold text-lg whitespace-nowrap', light ? 'text-white' : 'text-[#1E3A5F]')}>
+          Leadbooking CRM
+        </span>
+      )}
     </div>
   )
 }
