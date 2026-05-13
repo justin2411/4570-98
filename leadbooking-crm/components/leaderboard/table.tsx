@@ -1,39 +1,36 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Avatar } from '@/components/ui/avatar'
 import { TrendingUp, TrendingDown, Minus, Crown } from 'lucide-react'
 
 // ============================================================
 // TIER SYSTEM
-// Basis: Lifetime "termin_gelegt"-Einträge im activity_log
-// Anpassbar - die Schwellenwerte hier ändern, wenn nötig:
+// Basis: Lifetime "termin_gelegt" Summe aus leaderboard_cache
+// Schwellen können hier angepasst werden:
 // ============================================================
-type Tier = { name: string; emoji: string; min: number; cls: string; ring: string }
+type Tier = { name: string; emoji: string; min: number; cls: string }
 const TIERS: Tier[] = [
-  { name: 'VIP',     emoji: '👑', min: 1001, cls: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300', ring: 'ring-fuchsia-300' },
-  { name: 'Diamant', emoji: '💠', min: 301,  cls: 'bg-cyan-100 text-cyan-800 border-cyan-300',         ring: 'ring-cyan-300' },
-  { name: 'Platin',  emoji: '💎', min: 101,  cls: 'bg-slate-100 text-slate-700 border-slate-400',      ring: 'ring-slate-400' },
-  { name: 'Gold',    emoji: '🥇', min: 26,   cls: 'bg-yellow-100 text-yellow-800 border-yellow-300',   ring: 'ring-yellow-400' },
-  { name: 'Silber',  emoji: '🥈', min: 6,    cls: 'bg-gray-100 text-gray-700 border-gray-300',         ring: 'ring-gray-400' },
-  { name: 'Bronze',  emoji: '🥉', min: 0,    cls: 'bg-orange-100 text-orange-800 border-orange-300',   ring: 'ring-orange-400' },
+  { name: 'VIP',     emoji: '👑', min: 1001, cls: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300' },
+  { name: 'Diamant', emoji: '💠', min: 301,  cls: 'bg-cyan-100 text-cyan-800 border-cyan-300' },
+  { name: 'Platin',  emoji: '💎', min: 101,  cls: 'bg-slate-100 text-slate-700 border-slate-400' },
+  { name: 'Gold',    emoji: '🥇', min: 26,   cls: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+  { name: 'Silber',  emoji: '🥈', min: 6,    cls: 'bg-gray-100 text-gray-700 border-gray-300' },
+  { name: 'Bronze',  emoji: '🥉', min: 0,    cls: 'bg-orange-100 text-orange-800 border-orange-300' },
 ]
 function calcTier(lifetimeSet: number): Tier {
   return TIERS.find(t => lifetimeSet >= t.min) ?? TIERS[TIERS.length - 1]
 }
-
 // ============================================================
 
 interface Entry {
   setter_id: string
   full_name: string
   avatar_color: string
-  // Period stats
   calls_made: number
   appointments_set: number
   appointments_done: number
-  // Lifetime (für Tier-Berechnung)
   lifetime_set: number
   lifetime_done: number
 }
@@ -51,10 +48,8 @@ function periodStart(p: Period): string | null {
   if (p === 'today') return now.toISOString().split('T')[0]
   if (p === 'week') { const d = new Date(now); d.setDate(d.getDate() - d.getDay() + 1); return d.toISOString().split('T')[0] }
   if (p === 'month') return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
-  return null // 'all'
+  return null
 }
-
-const CALL_STATUSES = ['angerufen', 'nicht_erreicht', 'wiedervorlage', 'termin_gelegt', 'termin_stattgefunden']
 
 export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
   const supabase = createClient()
@@ -67,32 +62,20 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
     setLoading(true)
     const now = new Date()
     const from = periodStart(p)
+    const yest = new Date(now); yest.setDate(yest.getDate() - 1)
+    const yestStr = yest.toISOString().split('T')[0]
 
-    // 1) Aktive Setter
     const { data: setters } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_color')
       .eq('role', 'setter')
       .eq('is_active', true)
 
-    // 2) ALLES aus activity_log holen (für Lifetime + Period)
-    const { data: allActivity } = await supabase
-      .from('activity_log')
-      .select('setter_id, new_status, created_at')
-      .in('new_status', CALL_STATUSES)
+    // ALLE cache-Zeilen holen (für Lifetime + Period in einem Rutsch)
+    const { data: cacheData } = await supabase
+      .from('leaderboard_cache')
+      .select('setter_id, date, calls_made, appointments_set, appointments_done')
 
-    // 3) Trend: stattgefundene gestern (für Vergleich)
-    const yest = new Date(now); yest.setDate(yest.getDate()-1)
-    const yestStr = yest.toISOString().split('T')[0]
-    const ym = new Map<string, number>()
-    for (const r of allActivity ?? []) {
-      if (r.new_status === 'termin_stattgefunden' && r.created_at.startsWith(yestStr)) {
-        ym.set(r.setter_id, (ym.get(r.setter_id) ?? 0) + 1)
-      }
-    }
-    setYMap(ym)
-
-    // 4) Aggregieren - sowohl Lifetime als auch Period
     const map = new Map<string, Entry>()
     for (const s of setters ?? []) {
       map.set(s.id, {
@@ -103,21 +86,30 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
         lifetime_set: 0, lifetime_done: 0,
       })
     }
-    for (const row of allActivity ?? []) {
+
+    const ym = new Map<string, number>()
+    for (const row of cacheData ?? []) {
       const e = map.get(row.setter_id)
-      if (!e) continue // Setter inaktiv oder gelöscht
-      // Lifetime zählt immer
-      if (row.new_status === 'termin_gelegt') e.lifetime_set++
-      if (row.new_status === 'termin_stattgefunden') e.lifetime_done++
-      // Period nur wenn im Zeitraum
-      if (from === null || row.created_at >= from) {
-        if (CALL_STATUSES.includes(row.new_status)) e.calls_made++
-        if (row.new_status === 'termin_gelegt') e.appointments_set++
-        if (row.new_status === 'termin_stattgefunden') e.appointments_done++
+      if (!e) continue
+
+      // Lifetime zählt IMMER
+      e.lifetime_set += row.appointments_set
+      e.lifetime_done += row.appointments_done
+
+      // Period: nur Tage im Zeitraum
+      if (from === null || row.date >= from) {
+        e.calls_made += row.calls_made
+        e.appointments_set += row.appointments_set
+        e.appointments_done += row.appointments_done
+      }
+
+      // Trend (gestern stattgefunden)
+      if (row.date === yestStr) {
+        ym.set(row.setter_id, (ym.get(row.setter_id) ?? 0) + row.appointments_done)
       }
     }
+    setYMap(ym)
 
-    // 5) Sortieren: Stattgef. DESC, dann Gelegt DESC, dann Name ASC
     const arr = Array.from(map.values()).sort((a,b) => {
       if (b.appointments_done !== a.appointments_done) return b.appointments_done - a.appointments_done
       if (b.appointments_set !== a.appointments_set) return b.appointments_set - a.appointments_set
@@ -129,8 +121,8 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
 
   useEffect(() => {
     load(period)
-    const ch = supabase.channel('lb-activity')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, () => load(period))
+    const ch = supabase.channel('lb-cache')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard_cache' }, () => load(period))
       .subscribe()
     return () => { supabase.removeChannel(ch) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,13 +136,11 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
   ]
 
   const top3 = entries.slice(0, 3)
-  // Damit das Podium dem Brauch entspricht (2 | 1 | 3): reorder
   const podium = top3.length === 3 ? [top3[1], top3[0], top3[2]] : top3
   const podiumIdx = top3.length === 3 ? [1, 0, 2] : top3.map((_, i) => i)
 
   return (
     <div className="space-y-4">
-      {/* Period Selector */}
       <div className="flex gap-2 flex-wrap items-center">
         {PERIODS.map(p => (
           <button key={p.value} onClick={() => setPeriod(p.value)}
@@ -158,10 +148,9 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
             {p.label}
           </button>
         ))}
-        <span className="ml-auto text-xs text-gray-500 italic">Sortiert nach stattgefundenen Terminen · Tier basiert auf gelegten Terminen lebenslang</span>
+        <span className="ml-auto text-xs text-gray-500 italic">Sortiert nach stattgefundenen Terminen · Tier basiert auf lebenslang gelegten Terminen</span>
       </div>
 
-      {/* PODIUM (Top 3) */}
       {podium.length >= 1 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {podium.map((e, displayIdx) => {
@@ -196,7 +185,6 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
         </div>
       )}
 
-      {/* FULL TABLE */}
       {entries.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
@@ -253,7 +241,6 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
         </div>
       )}
 
-      {/* Empty / Loading */}
       {entries.length === 0 && !loading && (
         <div className="text-center py-16 text-gray-900">
           <p className="text-4xl mb-3">🏆</p>
