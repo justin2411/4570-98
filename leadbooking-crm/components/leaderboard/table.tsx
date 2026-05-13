@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Avatar } from '@/components/ui/avatar'
-import { TrendingUp, TrendingDown, Minus, Crown } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Crown, Info } from 'lucide-react'
 
 // ============================================================
 // TIER SYSTEM
@@ -21,6 +21,12 @@ const TIERS: Tier[] = [
 ]
 function calcTier(lifetimeSet: number): Tier {
   return TIERS.find(t => lifetimeSet >= t.min) ?? TIERS[TIERS.length - 1]
+}
+// Legend von Bronze (niedrigster) bis VIP (höchster) ordnen
+const TIERS_ASC = [...TIERS].reverse()
+function tierRange(t: Tier): string {
+  const next = TIERS.find(x => x.min > t.min)
+  return next ? `${t.min}–${next.min - 1}` : `${t.min}+`
 }
 // ============================================================
 
@@ -57,6 +63,7 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
   const [period, setPeriod] = useState<Period>('week')
   const [yMap, setYMap] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [showLegend, setShowLegend] = useState(false)
 
   async function load(p: Period) {
     setLoading(true)
@@ -71,7 +78,6 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
       .eq('role', 'setter')
       .eq('is_active', true)
 
-    // ALLE cache-Zeilen holen (für Lifetime + Period in einem Rutsch)
     const { data: cacheData } = await supabase
       .from('leaderboard_cache')
       .select('setter_id, date, calls_made, appointments_set, appointments_done')
@@ -92,18 +98,15 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
       const e = map.get(row.setter_id)
       if (!e) continue
 
-      // Lifetime zählt IMMER
       e.lifetime_set += row.appointments_set
       e.lifetime_done += row.appointments_done
 
-      // Period: nur Tage im Zeitraum
       if (from === null || row.date >= from) {
         e.calls_made += row.calls_made
         e.appointments_set += row.appointments_set
         e.appointments_done += row.appointments_done
       }
 
-      // Trend (gestern stattgefunden)
       if (row.date === yestStr) {
         ym.set(row.setter_id, (ym.get(row.setter_id) ?? 0) + row.appointments_done)
       }
@@ -148,8 +151,31 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
             {p.label}
           </button>
         ))}
-        <span className="ml-auto text-xs text-gray-500 italic">Sortiert nach stattgefundenen Terminen · Tier basiert auf lebenslang gelegten Terminen</span>
+        <button onClick={() => setShowLegend(v => !v)}
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+          <Info className="w-3.5 h-3.5" />
+          {showLegend ? 'Legende ausblenden' : 'Tier-Legende anzeigen'}
+        </button>
       </div>
+
+      {/* TIER-LEGENDE (ausklappbar) */}
+      {showLegend && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">🏅 Tier-System · Basis: gelegte Termine lebenslang</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {TIERS_ASC.map(t => (
+              <div key={t.name} className={`px-3 py-3 rounded-lg border-2 text-center ${t.cls}`}>
+                <div className="text-3xl mb-1">{t.emoji}</div>
+                <div className="text-sm font-bold">{t.name}</div>
+                <div className="text-[11px] mt-0.5 opacity-80 font-medium">{tierRange(t)} gelegt</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-500 mt-3 italic">
+            💡 Sortierung der Rangliste richtet sich nach <strong>stattgefundenen Terminen</strong> im gewählten Zeitraum. Der Tier-Badge zeigt deine lebenslange Leistung an gelegten Terminen.
+          </p>
+        </div>
+      )}
 
       {podium.length >= 1 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
