@@ -27,7 +27,6 @@ html, body {
   /* Schriftrendering schöner auf Retina-Displays */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Mindesthöhe damit Hintergrund nicht abreißt */
   min-height: 100%;
 }
 
@@ -37,7 +36,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Kein blaues "Aufblitzen" beim Antippen von Links/Buttons auf iOS */
+/* Kein blaues "Aufblitzen" beim Antippen */
 a, button, [role="button"], input, textarea, select, label {
   -webkit-tap-highlight-color: transparent;
 }
@@ -47,14 +46,39 @@ a, button, [role="button"] {
   touch-action: manipulation;
 }
 
-/* In iOS-Safari "Standalone" (Home-Screen-PWA) Statusbar passend einfärben.
-   Wird unterstützt via theme-color in <meta>, hier nur als Fallback. */
 @supports (padding-top: env(safe-area-inset-top)) {
   body {
-    /* Damit auch der Hintergrund hinter der Statusbar mitfärbt, falls
-       jemand die Seite ohne fixed-Header sieht. */
     background-color: var(--background);
   }
+}
+
+/* ============================================================
+   iOS-FIX: date/time/datetime-local Inputs respektieren w-full
+   ============================================================
+   iOS Safari rendert <input type="date"> mit einer eingebackenen
+   Mindestbreite die alles seitwärts schiebt. Workaround: appearance
+   killen + min-width: 0 + max-width: 100%.
+*/
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  /* Damit das Calendar/Clock-Icon nicht überlappt: etwas rechts Platz */
+  padding-right: 0.75rem;
+}
+
+/* Alle Inputs/Textareas/Selects: nie über Container hinaus */
+input, textarea, select {
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* iOS Form-Inputs: kein Zoom-In beim Fokus (min 16px font-size) */
@@ -66,7 +90,7 @@ a, button, [role="button"] {
   }
 }
 
-/* Lange E-Mails / Telefonnummern brechen sauber statt auszubrechen */
+/* Lange E-Mails / Telefonnummern brechen sauber */
 .break-anywhere {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -76,7 +100,6 @@ a, button, [role="button"] {
   .text-balance {
     text-wrap: balance;
   }
-  /* Hilfsklassen für Safe-Area Insets */
   .pt-safe { padding-top: env(safe-area-inset-top); }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pl-safe { padding-left: env(safe-area-inset-left); }
