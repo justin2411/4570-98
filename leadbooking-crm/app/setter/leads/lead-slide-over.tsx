@@ -28,9 +28,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
   const existing = lead.appointment_date ? new Date(lead.appointment_date) : null
   const [apptDate, setApptDate] = useState(existing ? existing.toISOString().split('T')[0] : '')
   const [apptTime, setApptTime] = useState(existing ? existing.toTimeString().slice(0,5) : '')
-  const [showConsentDialog, setShowConsentDialog] = useState(false)
-  const [consentGiven, setConsentGiven] = useState(lead.consent_given ?? false)
-  const [pendingStatus, setPendingStatus] = useState<LeadStatus | null>(null)
 
   async function saveNote() {
     setSavingNote(true)
@@ -50,23 +47,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
     toast.success('Termin gespeichert')
     onUpdate(data as Lead)
     setSavingDate(false)
-  }
-
-  async function saveConsent() {
-    const { error } = await supabase.from('leads').update({
-      consent_given: true,
-      consent_date: new Date().toISOString(),
-      consent_setter_id: userId,
-      consent_text: 'Telefonische Einwilligung erteilt beim Erstkontakt'
-    }).eq('id', lead.id)
-    if (error) { toast.error('Fehler beim Speichern der Einwilligung'); return }
-    setConsentGiven(true)
-    setShowConsentDialog(false)
-    if (pendingStatus) {
-      await saveStatus(pendingStatus)
-      setPendingStatus(null)
-    }
-    toast.success('Einwilligung dokumentiert ✅')
   }
 
   async function saveStatus(status: LeadStatus) {
@@ -124,21 +104,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
         </div>
 
         <div className="px-6 py-4 border-b border-gray-100">
-          {lead.consent_given ? (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-1">
-              <p className="text-xs font-bold text-green-700">✅ Einwilligung dokumentiert</p>
-              <p className="text-xs text-green-600">Datum: {lead.consent_date ? new Date(lead.consent_date).toLocaleString('de-DE') : '–'}</p>
-              <p className="text-xs text-green-600">Text: {lead.consent_text ?? '–'}</p>
-            </div>
-          ) : (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
-              <p className="text-xs font-bold text-orange-700">⚠️ Noch keine Einwilligung</p>
-              <p className="text-xs text-orange-600">Beim nächsten Statuswechsel wird sie abgefragt</p>
-            </div>
-          )}
-        </div>
-
-        <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Terminzeit</p>
           <div className="grid grid-cols-2 gap-3 mb-2">
             <div>
@@ -176,7 +141,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
               const isCurrent = lead.status === s
               const isLoading = loading === s
               return (
-                <button key={s} onClick={() => { if (!consentGiven) { setPendingStatus(s); setShowConsentDialog(true) } else { saveStatus(s) } }} disabled={isCurrent || loading !== null}
+                <button key={s} onClick={() => saveStatus(s)} disabled={isCurrent || loading !== null}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all font-semibold text-sm ${isCurrent ? 'border-[#2E75B6] bg-blue-50 text-[#2E75B6] cursor-default' : 'border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50 disabled:opacity-50'}`}>
                   {isLoading ? 'Wird gespeichert...' : STATUS_LABELS[s]}{isCurrent && ' — aktuell'}
                 </button>
@@ -185,27 +150,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate }: Props) {
           </div>
         </div>
       </div>
-      {showConsentDialog && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-bold text-lg text-[#1E3A5F]">⚖️ Einwilligung dokumentieren</h3>
-            <p className="text-sm text-gray-700">Hat die Person der telefonischen Beratung zugestimmt?</p>
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
-              <p className="font-semibold mb-1">Pflichttext nach §7a UWG:</p>
-              <p>"Ich rufe an wegen finanzieller Absicherung für Heilberufler. Darf ich kurz erklären worum es geht, oder soll ich Sie aus der Liste nehmen?"</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={saveConsent} className="flex-1 bg-green-600 text-white py-2 rounded-xl font-semibold text-sm hover:bg-green-700">
-                ✅ Ja, Einwilligung erteilt
-              </button>
-              <button onClick={() => { setShowConsentDialog(false); setPendingStatus(null) }} className="flex-1 bg-red-100 text-red-700 py-2 rounded-xl font-semibold text-sm hover:bg-red-200">
-                ❌ Nein, ablehnt
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 text-center">Datum & Uhrzeit werden automatisch gespeichert</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

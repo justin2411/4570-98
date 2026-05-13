@@ -33,10 +33,6 @@ export interface Lead {
   status: LeadStatus
   appointment_date: string | null
   notes: string | null
-  consent_given: boolean
-  consent_date: string | null
-  consent_setter_id: string | null
-  consent_text: string | null
   created_at: string
   updated_at: string
   profiles?: Profile

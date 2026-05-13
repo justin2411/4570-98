@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, FileSpreadsheet, Trophy, LogOut, UserCog } from 'lucide-react'
+import { LayoutDashboard, FileSpreadsheet, Trophy, LogOut, UserCog } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from './logo'
 import { cn } from '@/lib/utils'
@@ -12,7 +12,6 @@ const links = [
   { href: '/admin/leads', label: 'Leads', icon: FileSpreadsheet },
   { href: '/admin/setter', label: 'Setter', icon: UserCog },
   { href: '/admin/rangliste', label: 'Rangliste', icon: Trophy },
-  { href: '/admin/einwilligungen', label: 'Einwilligungen', icon: Trophy },
 ]
 
 export function AdminNav() {
