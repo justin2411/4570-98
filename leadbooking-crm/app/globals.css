@@ -14,25 +14,78 @@
   }
 }
 
+/* ============================================================
+   GLOBAL: Native-App-Feeling auf Mobile
+   ============================================================ */
+html, body {
+  /* Kein seitliches Scrollen (Rubber-Band-Effekt auf iOS) */
+  overflow-x: clip;
+  /* Pull-to-refresh / horizontales Wegziehen unterbinden */
+  overscroll-behavior: none;
+  /* Glatteres Scrollen auf iOS */
+  -webkit-overflow-scrolling: touch;
+  /* Schriftrendering schöner auf Retina-Displays */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Mindesthöhe damit Hintergrund nicht abreißt */
+  min-height: 100%;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Kein blaues "Aufblitzen" beim Antippen von Links/Buttons auf iOS */
+a, button, [role="button"], input, textarea, select, label {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Sofortiges Tap-Feedback, kein 300ms-Delay */
+a, button, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* In iOS-Safari "Standalone" (Home-Screen-PWA) Statusbar passend einfärben.
+   Wird unterstützt via theme-color in <meta>, hier nur als Fallback. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    /* Damit auch der Hintergrund hinter der Statusbar mitfärbt, falls
+       jemand die Seite ohne fixed-Header sieht. */
+    background-color: var(--background);
+  }
+}
+
+/* iOS Form-Inputs: kein Zoom-In beim Fokus (min 16px font-size) */
+@media screen and (max-width: 768px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Lange E-Mails / Telefonnummern brechen sauber statt auszubrechen */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+  /* Hilfsklassen für Safe-Area Insets */
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pl-safe { padding-left: env(safe-area-inset-left); }
+  .pr-safe { padding-right: env(safe-area-inset-right); }
 }
 
 ::placeholder {
   color: #6B7280 !important;
   opacity: 1;
-}
-
-table td, table th, table span, table p {
-  color: #111827;
 }
 
 table td, table th, table span, table p {
