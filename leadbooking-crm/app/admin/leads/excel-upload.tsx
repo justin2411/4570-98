@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { X, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import { Lead } from '@/types'
+import { normalizeState } from '@/lib/normalize-state'
 import toast from 'react-hot-toast'
 
 interface RawRow {
@@ -16,8 +17,8 @@ interface RawRow {
 }
 
 interface ParsedLead {
-  name: string; phone: string; email: string; state: string; score: number;
-  lead_quality: string; age_indicator: string; signals: string; isDuplicate?: boolean
+  name: string; phone: string; email: string; state: string; original_state: string;
+  score: number; lead_quality: string; age_indicator: string; signals: string; isDuplicate?: boolean
 }
 
 interface Setter { id: string; full_name: string }
@@ -53,11 +54,15 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
 
     const leads: ParsedLead[] = rows.filter(r => r.Name && r.Telefon).map(r => {
       const phone = String(r.Telefon ?? '').trim()
+      const rawState = String(r.Bundesland ?? '').trim()
+      const normalized = normalizeState(rawState)
       return {
         name: String(r.Name ?? '').trim(),
         phone,
         email: String(r['E-Mail'] ?? '').trim(),
-        state: String(r.Bundesland ?? '').trim(),
+        // Normalisiert speichern, Fallback aufs Original wenn nicht erkannt
+        state: normalized || rawState,
+        original_state: rawState,
         score: parseFloat(String(r.Gesamt ?? '0')),
         lead_quality: String(r.Lead ?? '').trim(),
         age_indicator: String(r.Alter ?? '').trim(),
@@ -76,7 +81,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     const newLeads = parsed.filter(l => !l.isDuplicate)
     if (newLeads.length === 0) { toast.error('Keine neuen Leads zum Importieren.'); setLoading(false); return }
 
-    const toInsert = newLeads.map(({ isDuplicate: _dup, ...l }) => ({
+    const toInsert = newLeads.map(({ isDuplicate: _dup, original_state: _orig, ...l }) => ({
       ...l, status: 'neu', uploaded_by: adminId, assigned_to: adminId,
     }))
 
@@ -93,13 +98,12 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
 
     toast.success(toInsert.length + ' Leads importiert und dir zugewiesen!')
     setLoading(false)
-    // Seite neu laden damit alle Leads sichtbar sind
     window.location.reload()
   }
 
-
   const newCount = parsed.filter(l => !l.isDuplicate).length
   const dupCount = parsed.filter(l => l.isDuplicate).length
+  const normalizedCount = parsed.filter(l => l.original_state && l.original_state !== l.state).length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -118,15 +122,17 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
               <p className="text-sm text-gray-500 mt-1">oder klicken zum Auswählen (.xlsx, .xls)</p>
               <div className="mt-4 text-xs text-gray-400 space-y-1">
                 <p>Erwartete Spalten: Name, Telefon, E-Mail, Bundesland, Gesamt, Lead, Alter, Signale</p>
+                <p className="text-[#2E75B6]">Bundesländer werden automatisch normalisiert (z.B. „BaWü" → „Baden-Württemberg")</p>
               </div>
             </div>
           )}
 
           {step === 'preview' && (
             <div className="space-y-4">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2 text-green-600 text-sm"><CheckCircle className="w-4 h-4" />{newCount} neue Leads</div>
                 {dupCount > 0 && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertTriangle className="w-4 h-4" />{dupCount} Duplikate (übersprungen)</div>}
+                {normalizedCount > 0 && <div className="flex items-center gap-2 text-purple-600 text-sm">🧹 {normalizedCount} Bundesländer normalisiert</div>}
               </div>
 
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -143,7 +149,12 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
                       <tr key={i} className={l.isDuplicate ? 'bg-orange-50 opacity-60' : ''}>
                         <td className="px-3 py-2">{l.name}</td>
                         <td className="px-3 py-2">{l.phone}</td>
-                        <td className="px-3 py-2">{l.state}</td>
+                        <td className="px-3 py-2">
+                          {l.state}
+                          {l.original_state && l.original_state !== l.state && (
+                            <span className="text-[10px] text-gray-400 ml-1">({l.original_state})</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">{l.score}</td>
                         <td className="px-3 py-2">{l.lead_quality}</td>
                         <td className="px-3 py-2">{l.isDuplicate ? '⚠️ Duplikat' : '✅ Neu'}</td>

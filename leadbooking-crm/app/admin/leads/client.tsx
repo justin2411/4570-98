@@ -5,13 +5,13 @@ import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { StatusBadge } from '@/components/leads/status-badge'
 import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
+import { FixStatesModal } from './fix-states-modal'
 import { Button } from '@/components/ui/button'
-import { Upload, Search, X } from 'lucide-react'
+import { Upload, Search, X, Wand2 } from 'lucide-react'
 
 interface Setter { id: string; full_name: string; avatar_color: string }
 interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string }
 
-// Suchhilfe: tolerant bei Telefonnummern + Teiltreffer bei Name/E-Mail
 function matchesSearch(lead: Lead, q: string): boolean {
   const qt = q.trim().toLowerCase()
   if (!qt) return true
@@ -26,6 +26,7 @@ function matchesSearch(lead: Lead, q: string): boolean {
 export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [showUpload, setShowUpload] = useState(false)
+  const [showFixStates, setShowFixStates] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>('unassigned')
@@ -40,7 +41,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     ...setters.map(s => ({ id: s.id, label: s.full_name, count: leads.filter(l => l.assigned_to === s.id).length })),
   ]
 
-  // 1) Tab → 2) Suche → 3) Status-Filter
   const tabLeads = activeTab === 'unassigned' ? unassigned : leads.filter(l => l.assigned_to === activeTab)
   const searched = useMemo(() => tabLeads.filter(l => matchesSearch(l, search)), [tabLeads, search])
   const filtered = statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter)
@@ -64,11 +64,13 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
               {selected.size} zuweisen
             </Button>
           )}
+          <Button variant="secondary" onClick={() => setShowFixStates(true)}>
+            <Wand2 className="w-4 h-4" />Bundesländer reparieren
+          </Button>
           <Button onClick={() => setShowUpload(true)}><Upload className="w-4 h-4" />Excel hochladen</Button>
         </div>
       </div>
 
-      {/* Suchfeld */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
@@ -93,7 +95,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         </p>
       )}
 
-      {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {tabs.map(t => (
           <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(new Set()); setStatusFilter('alle') }}
@@ -104,7 +105,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         ))}
       </div>
 
-      {/* Status-Filter (Anzahl basiert auf gesuchten Leads) */}
       <div className="flex flex-wrap gap-2 p-4 bg-white rounded-xl border border-gray-200">
         <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
           Alle ({searched.length})
@@ -152,6 +152,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
       </div>
 
       {showUpload && <ExcelUpload adminId={adminId} setters={setters} onClose={() => setShowUpload(false)} onImported={newLeads => { setLeads(prev => [...newLeads, ...prev]); setShowUpload(false) }} />}
+      {showFixStates && <FixStatesModal onClose={() => setShowFixStates(false)} onApplied={() => { setShowFixStates(false); window.location.reload() }} />}
       {assignTarget.length > 0 && <AssignModal leadIds={assignTarget} allLeads={leads} setters={setters} adminId={adminId} adminName="Admin" onClose={() => setAssignTarget([])} onAssigned={(leadIds, setterId) => { setLeads(prev => prev.map(l => leadIds.includes(l.id) ? { ...l, assigned_to: setterId } : l)); setAssignTarget([]); setSelected(new Set()) }} />}
     </div>
   )
