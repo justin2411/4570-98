@@ -20,7 +20,6 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
 }
 const ALL_STATUSES: LeadStatus[] = ['neu','angerufen','nicht_erreicht','wiedervorlage','termin_gelegt','termin_stattgefunden','kein_interesse']
 
-// Suchhilfe: tolerant bei Telefonnummern + Teiltreffer bei Name/E-Mail
 function matchesSearch(lead: Lead, q: string): boolean {
   const qt = q.trim().toLowerCase()
   if (!qt) return true
@@ -35,9 +34,12 @@ function matchesSearch(lead: Lead, q: string): boolean {
 export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userId: string }) {
   const supabase = createClient()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
-  const [selected, setSelected] = useState<Lead | null>(null)
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
   const [search, setSearch] = useState('')
+
+  // Navigation: Liste der IDs in der aktuellen gefilterten Reihenfolge + aktuelle Position
+  const [navList, setNavList] = useState<string[]>([])
+  const [navIdx, setNavIdx] = useState<number | null>(null)
 
   useEffect(() => {
     const ch = supabase.channel('leads').on('postgres_changes',
@@ -45,15 +47,42 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
       payload => {
         if (payload.eventType === 'UPDATE') {
           setLeads(prev => prev.map(l => l.id === payload.new.id ? payload.new as Lead : l))
-          setSelected(prev => prev?.id === payload.new.id ? payload.new as Lead : prev)
+        } else if (payload.eventType === 'INSERT') {
+          setLeads(prev => [payload.new as Lead, ...prev])
         }
       }).subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [userId])
 
-  // 1) Suche → 2) Status-Filter
   const searched = useMemo(() => leads.filter(l => matchesSearch(l, search)), [leads, search])
-  const filtered = statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter)
+  const filtered = useMemo(
+    () => statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter),
+    [searched, statusFilter]
+  )
+
+  function openLead(idx: number) {
+    // Beim Öffnen: Navigations-Liste auf die aktuell gefilterte Reihenfolge einfrieren
+    setNavList(filtered.map(l => l.id))
+    setNavIdx(idx)
+  }
+
+  function closeSlideOver() { setNavIdx(null); setNavList([]) }
+
+  function goNext() {
+    if (navIdx === null) return
+    if (navIdx + 1 >= navList.length) { closeSlideOver(); return }
+    setNavIdx(navIdx + 1)
+  }
+
+  function goPrev() {
+    if (navIdx === null) return
+    if (navIdx - 1 < 0) return
+    setNavIdx(navIdx - 1)
+  }
+
+  // Aktuell ausgewählter Lead via ID-Lookup (überlebt Status-Wechsel)
+  const currentLeadId = navIdx !== null ? navList[navIdx] : null
+  const currentLead = currentLeadId ? leads.find(l => l.id === currentLeadId) ?? null : null
 
   return (
     <div className="space-y-4">
@@ -69,7 +98,7 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
         />
         {search && (
           <button onClick={() => setSearch('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
             aria-label="Suche löschen">
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -82,7 +111,6 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
         </p>
       )}
 
-      {/* Status-Filter (Anzahl basiert auf Suchergebnissen) */}
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>Alle ({searched.length})</button>
         {ALL_STATUSES.map(s => {
@@ -93,8 +121,9 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
       </div>
 
       <div className="space-y-2">
-        {filtered.map(lead => (
-          <button key={lead.id} onClick={() => setSelected(lead)} className="w-full text-left bg-white border border-gray-200 rounded-2xl px-5 py-4 hover:border-[#2E75B6] hover:shadow-md transition-all">
+        {filtered.map((lead, idx) => (
+          <button key={lead.id} onClick={() => openLead(idx)}
+            className="w-full text-left bg-white border border-gray-200 rounded-2xl px-5 py-4 hover:border-[#2E75B6] hover:shadow-md active:scale-[0.99] transition-all">
             <div className="flex items-center justify-between gap-3 mb-2">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-bold text-gray-900 text-[15px] truncate">{lead.name}</span>
@@ -119,7 +148,18 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
           </p>
         )}
       </div>
-      {selected && <LeadSlideOver lead={selected} userId={userId} onClose={() => setSelected(null)} onUpdate={updated => setLeads(prev => prev.map(l => l.id === updated.id ? updated : l))} />}
+
+      {currentLead && navIdx !== null && (
+        <LeadSlideOver
+          lead={currentLead}
+          userId={userId}
+          onClose={closeSlideOver}
+          onUpdate={updated => setLeads(prev => prev.map(l => l.id === updated.id ? updated : l))}
+          onNext={navIdx < navList.length - 1 ? goNext : undefined}
+          onPrev={navIdx > 0 ? goPrev : undefined}
+          position={{ current: navIdx + 1, total: navList.length }}
+        />
+      )}
     </div>
   )
 }
