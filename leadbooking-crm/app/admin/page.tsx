@@ -26,9 +26,8 @@ export default async function AdminDashboard() {
     supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'setter').eq('is_active', true),
     supabase.from('leads').select('*', { count: 'exact', head: true }),
     supabase.from('activity_log').select('lead_id, new_status').gte('created_at', today),
-    // Fetch ALL activities from last 7 days (no dedup, generous limit)
     supabase.from('activity_log')
-      .select('id, setter_id, new_status, created_at, profiles(full_name, avatar_color), leads(name)')
+      .select('id, setter_id, lead_id, new_status, created_at, profiles(full_name, avatar_color), leads(name)')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(5000),
@@ -49,6 +48,7 @@ export default async function AdminDashboard() {
       setter_id: log.setter_id as string,
       setter_name: p?.full_name ?? '?',
       setter_color: p?.avatar_color ?? '#2E75B6',
+      lead_id: log.lead_id as string,
       lead_name: l?.name ?? '?',
       new_status: log.new_status as string,
       created_at: log.created_at as string,
