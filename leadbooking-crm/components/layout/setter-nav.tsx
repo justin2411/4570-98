@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Calendar, LogOut, Trophy } from 'lucide-react'
+import { LayoutDashboard, Users, Calendar, Clock, LogOut, Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from './logo'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 const links = [
   { href: '/setter', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/setter/leads', label: 'Meine Leads', icon: Users },
+  { href: '/setter/wiedervorlage', label: 'Wiedervorlagen', icon: Clock },
   { href: '/setter/termine', label: 'Meine Termine', icon: Calendar },
   { href: '/rangliste', label: 'Rangliste', icon: Trophy },
 ]

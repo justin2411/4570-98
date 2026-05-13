@@ -7,14 +7,17 @@ import { LeadSlideOver } from './lead-slide-over'
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
+  wiedervorlage: 'Wiedervorlage',
   termin_gelegt: 'Termin gelegt', termin_stattgefunden: 'Termin stattgefunden', kein_interesse: 'Kein Interesse',
 }
 const STATUS_COLORS: Record<LeadStatus, string> = {
   neu: 'bg-indigo-100 text-indigo-700', angerufen: 'bg-blue-100 text-blue-700',
-  nicht_erreicht: 'bg-orange-100 text-orange-700', termin_gelegt: 'bg-yellow-100 text-yellow-800',
+  nicht_erreicht: 'bg-orange-100 text-orange-700',
+  wiedervorlage: 'bg-purple-100 text-purple-700',
+  termin_gelegt: 'bg-yellow-100 text-yellow-800',
   termin_stattgefunden: 'bg-green-100 text-green-700', kein_interesse: 'bg-red-100 text-red-700',
 }
-const ALL_STATUSES: LeadStatus[] = ['neu','angerufen','nicht_erreicht','termin_gelegt','termin_stattgefunden','kein_interesse']
+const ALL_STATUSES: LeadStatus[] = ['neu','angerufen','nicht_erreicht','wiedervorlage','termin_gelegt','termin_stattgefunden','kein_interesse']
 
 export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userId: string }) {
   const supabase = createClient()
@@ -62,6 +65,9 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
               {lead.state && <span className="text-gray-500 text-xs">{lead.state}</span>}
             </div>
             {lead.email && <div className="text-xs text-gray-500 truncate">{lead.email}</div>}
+            {lead.status === 'wiedervorlage' && lead.recall_date && (
+              <div className="text-xs text-purple-700 font-semibold mt-1">⏰ Wiedervorlage: {new Date(lead.recall_date).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr</div>
+            )}
           </button>
         ))}
         {filtered.length === 0 && <p className="text-center text-gray-500 py-12">Keine Leads gefunden</p>}
