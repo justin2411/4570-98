@@ -133,8 +133,14 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     if (!lead.teams_link) { toast.error('Bitte Teams-Link eintragen und Termin speichern'); return }
     if (!lead.appointment_date) { toast.error('Bitte erst Termin speichern'); return }
 
-    const firstName = (lead.name || '').split(' ')[0] || lead.name || ''
+    // Nachname extrahieren: letztes Wort im Namen
+    // Funktioniert fuer "Anna Mueller", "Anna Leonie Roth", "Frau Dr. Schmidt" etc.
+    const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p.length > 0)
+    const lastName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : lead.name || ''
+
     const setterFirstName = (setterName || '').split(' ')[0] || 'Ihr Berater'
+    const setterFull = setterName || 'Ihr Berater'
+
     const dateObj = new Date(lead.appointment_date)
     const formattedDate = dateObj.toLocaleDateString('de-DE', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -145,25 +151,30 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     const shortDate = dateObj.toLocaleDateString('de-DE')
 
     const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
-    const body = `Guten Tag ${firstName},
+    const body = `Sehr geehrte Frau ${lastName},
 
-vielen Dank für Ihr Interesse an unserer Beratung speziell für Hebammen.
+vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge speziell für Hebammen.
 
-Hiermit bestätige ich Ihnen Ihren Termin:
+Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
 
-Datum: ${formattedDate}
-Uhrzeit: ${formattedTime} Uhr (ca. 45 Minuten)
-Microsoft Teams: ${lead.teams_link}
+▸ Datum: ${formattedDate}
+▸ Uhrzeit: ${formattedTime} Uhr
+▸ Dauer: ca. 60 Minuten
+▸ Beratungsraum: ${lead.teams_link}
 
-Bitte klicken Sie kurz vor dem Termin auf den Teams-Link. Sie benötigen keine Software-Installation – ein aktueller Browser reicht aus.
+Bitte klicken Sie wenige Minuten vor dem Termin auf den Microsoft Teams-Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
 
-Sollte ein anderer Termin besser passen, melden Sie sich gerne kurz bei uns.
+Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns. 
+
+Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
 
 Mit freundlichen Grüßen
-${setterFirstName}
-für das Hebammen-Beratungsteam
 
---
+${setterFull}
+Hebammen-Beratungsteam
+
+────────────────────────────
+Hebammen-Vorsorge
 beratung@hebammen-vorsorge.de
 www.hebammen-vorsorge.de`
 
