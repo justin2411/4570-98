@@ -6,21 +6,28 @@ import { ProfileForm } from './profile-form'
 import type { Profile } from '@/types'
 
 export default async function ProfilPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single()
 
-  if (!profile) {
+  if (error || !profile) {
     return (
-      <div className="text-center py-12 text-red-600">
-        Profil konnte nicht geladen werden. Bitte neu anmelden.
+      <div className="max-w-3xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+          <h2 className="text-base font-semibold text-red-900 mb-2">Profil konnte nicht geladen werden</h2>
+          <p className="text-sm text-red-800">
+            {error?.message?.includes('column') || error?.message?.includes('does not exist')
+              ? 'Die Datenbank-Migration wurde noch nicht ausgeführt. Bitte führe das SQL aus dem Patch in Supabase aus.'
+              : (error?.message || 'Unbekannter Fehler')}
+          </p>
+        </div>
       </div>
     )
   }
