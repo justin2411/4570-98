@@ -153,7 +153,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
     const body = `Sehr geehrte Frau ${lastName},
 
-vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge speziell für Hebammen.
+vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für Hebammen.
 
 Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
 
@@ -164,7 +164,7 @@ Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
 
 Bitte klicken Sie wenige Minuten vor dem Termin auf den Microsoft Teams-Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
 
-Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns. 
+Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns.
 
 Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
 
@@ -173,10 +173,17 @@ Mit freundlichen Grüßen
 ${setterFull}
 Hebammen-Beratungsteam
 
-────────────────────────────
-Hebammen-Vorsorge
-beratung@hebammen-vorsorge.de
-www.hebammen-vorsorge.de`
+
+────────────────────────────────────────
+
+   HEBAMMEN VORSORGE
+   Altersvorsorge & Vermögensaufbau
+   speziell für Hebammen in Deutschland
+
+   E-Mail:   beratung@hebammen-vorsorge.de
+   Web:      www.hebammen-vorsorge.de
+
+────────────────────────────────────────`
 
     // mailto:-URL oeffnet das Standard-Mailprogramm (Apple Mail, Outlook, iOS Mail).
     // Funktioniert geraeteuebergreifend, kein Gmail-Login noetig.
