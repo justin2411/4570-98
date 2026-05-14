@@ -17,6 +17,12 @@ export interface Profile {
   avatar_color: string
   is_active: boolean
   created_at: string
+  // Setter-Profil-Felder (Migration 01-migration-setter-profil.sql)
+  role_title: string | null
+  teams_room_url: string | null
+  phone_direct: string | null
+  custom_signature: string | null
+  use_custom_signature: boolean
 }
 
 export interface Lead {
@@ -37,6 +43,7 @@ export interface Lead {
   notes: string | null
   call_attempts: number
   last_call_attempt: string | null
+  teams_link: string | null
   created_at: string
   updated_at: string
   profiles?: Profile

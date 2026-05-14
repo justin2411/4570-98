@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle } from 'lucide-react'
 import { applicableTemplates, buildWhatsappUrl } from '@/lib/whatsapp-templates'
+import { buildEmailSignature } from '@/lib/email-signature'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -51,15 +52,27 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
   const [recallTime, setRecallTime] = useState(existingRecall ? existingRecall.toTimeString().slice(0,5) : '10:00')
   const [savingRecall, setSavingRecall] = useState(false)
 
-  const [setterName, setSetterName] = useState<string>('')
+  // Setter-Profil komplett laden (für WhatsApp-Signatur + Mail + Teams-Link)
+  const [setterProfile, setSetterProfile] = useState<{
+    full_name: string
+    role_title: string | null
+    teams_room_url: string | null
+    phone_direct: string | null
+    custom_signature: string | null
+    use_custom_signature: boolean
+  } | null>(null)
+  const setterName = setterProfile?.full_name || ''
 
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Setter-Name einmal laden (für WhatsApp-Signatur)
   useEffect(() => {
     if (!userId) return
-    supabase.from('profiles').select('full_name').eq('id', userId).single()
-      .then(({ data }) => { if (data?.full_name) setSetterName(data.full_name) })
+    supabase
+      .from('profiles')
+      .select('full_name, role_title, teams_room_url, phone_direct, custom_signature, use_custom_signature')
+      .eq('id', userId)
+      .single()
+      .then(({ data }) => { if (data) setSetterProfile(data as any) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
@@ -68,7 +81,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     const e = lead.appointment_date ? new Date(lead.appointment_date) : null
     setApptDate(e ? e.toISOString().split('T')[0] : '')
     setApptTime(e ? e.toTimeString().slice(0,5) : '')
-    setTeamsLinkInput(lead.teams_link || '')
+    setTeamsLinkInput(lead.teams_link || setterProfile?.teams_room_url || '')
     const r = lead.recall_date ? new Date(lead.recall_date) : null
     setRecallDate(r ? r.toISOString().split('T')[0] : defaultRecallDate())
     setRecallTime(r ? r.toTimeString().slice(0,5) : '10:00')
@@ -134,12 +147,8 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     if (!lead.appointment_date) { toast.error('Bitte erst Termin speichern'); return }
 
     // Nachname extrahieren: letztes Wort im Namen
-    // Funktioniert fuer "Anna Mueller", "Anna Leonie Roth", "Frau Dr. Schmidt" etc.
     const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p.length > 0)
     const lastName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : lead.name || ''
-
-    const setterFirstName = (setterName || '').split(' ')[0] || 'Ihr Berater'
-    const setterFull = setterName || 'Ihr Berater'
 
     const dateObj = new Date(lead.appointment_date)
     const formattedDate = dateObj.toLocaleDateString('de-DE', {
@@ -149,6 +158,15 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
       hour: '2-digit', minute: '2-digit'
     })
     const shortDate = dateObj.toLocaleDateString('de-DE')
+
+    // Signatur aus Setter-Profil bauen
+    const signature = buildEmailSignature({
+      full_name: setterProfile?.full_name || 'Ihr Berater',
+      role_title: setterProfile?.role_title || 'Hebammen-Beratungsteam',
+      phone_direct: setterProfile?.phone_direct || null,
+      custom_signature: setterProfile?.custom_signature || null,
+      use_custom_signature: setterProfile?.use_custom_signature || false,
+    })
 
     const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
     const body = `Sehr geehrte Frau ${lastName},
@@ -170,20 +188,7 @@ Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
 
 Mit freundlichen Grüßen
 
-${setterFull}
-Hebammen-Beratungsteam
-
-
-────────────────────────────────────────
-
-   HEBAMMEN VORSORGE
-   Altersvorsorge & Vermögensaufbau
-   speziell für Hebammen in Deutschland
-
-   E-Mail:   beratung@hebammen-vorsorge.de
-   Web:      www.hebammen-vorsorge.de
-
-────────────────────────────────────────`
+${signature}`
 
     // mailto:-URL oeffnet das Standard-Mailprogramm (Apple Mail, Outlook, iOS Mail).
     // Funktioniert geraeteuebergreifend, kein Gmail-Login noetig.
