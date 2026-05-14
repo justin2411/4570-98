@@ -43,6 +43,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
   const existing = lead.appointment_date ? new Date(lead.appointment_date) : null
   const [apptDate, setApptDate] = useState(existing ? existing.toISOString().split('T')[0] : '')
   const [apptTime, setApptTime] = useState(existing ? existing.toTimeString().slice(0,5) : '')
+  const [teamsLinkInput, setTeamsLinkInput] = useState(lead.teams_link || '')
 
   const existingRecall = lead.recall_date ? new Date(lead.recall_date) : null
   const [showRecallDialog, setShowRecallDialog] = useState(false)
@@ -67,6 +68,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     const e = lead.appointment_date ? new Date(lead.appointment_date) : null
     setApptDate(e ? e.toISOString().split('T')[0] : '')
     setApptTime(e ? e.toTimeString().slice(0,5) : '')
+    setTeamsLinkInput(lead.teams_link || '')
     const r = lead.recall_date ? new Date(lead.recall_date) : null
     setRecallDate(r ? r.toISOString().split('T')[0] : defaultRecallDate())
     setRecallTime(r ? r.toTimeString().slice(0,5) : '10:00')
@@ -92,19 +94,15 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250)
   }
 
-  // iOS Safari Block-Fix: KEIN State-Update im Click-Handler.
-  // Wir verzoegern alles um 200ms damit die tel:-Navigation komplett
-  // durchlaeuft, bevor React irgendwas anfasst. Sonst sieht iOS das
-  // als "Seite verzoegert den Anruf" und blockt.
+  // Separater Counter-Button - User tippt aktiv "Anruf zaehlen".
+  // tel:-Link ist davon entkoppelt, keine iOS-Anruf-Blockade moeglich.
   function handleCallClick() {
-    setTimeout(() => {
-      const newCount = (lead.call_attempts ?? 0) + 1
-      const now = new Date().toISOString()
-      onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
-      supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
-        .then(({ data }) => { if (data) onUpdate(data as Lead) })
-        .catch(() => {})
-    }, 200)
+    const newCount = (lead.call_attempts ?? 0) + 1
+    const now = new Date().toISOString()
+    onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
+    supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
+      .then(({ data }) => { if (data) onUpdate(data as Lead) })
+      .catch(() => {})
   }
 
   async function saveNote() {
@@ -118,16 +116,73 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     if (!apptDate) { toast.error('Bitte Datum eingeben'); return }
     setSavingDate(true)
     const dt = apptTime ? new Date(`${apptDate}T${apptTime}`).toISOString() : new Date(`${apptDate}T00:00`).toISOString()
-    const { data, error } = await supabase.from('leads').update({ appointment_date: dt }).eq('id', lead.id).select().single()
+    const { data, error } = await supabase
+      .from('leads')
+      .update({ appointment_date: dt, teams_link: teamsLinkInput.trim() || null })
+      .eq('id', lead.id)
+      .select()
+      .single()
     if (error) { toast.error('Fehler'); setSavingDate(false); return }
     toast.success('Termin gespeichert'); onUpdate(data as Lead); setSavingDate(false)
   }
 
+  // E-Mail-Entwurf in Gmail oeffnen mit allen Daten vorgefuellt.
+  // Funktioniert sowohl im Browser (Gmail-Webmail) als auch im Gmail-App am Handy.
+  function openEmailDraft() {
+    if (!lead.email) { toast.error('Lead hat keine E-Mail-Adresse'); return }
+    if (!lead.teams_link) { toast.error('Bitte Teams-Link eintragen und Termin speichern'); return }
+    if (!lead.appointment_date) { toast.error('Bitte erst Termin speichern'); return }
+
+    const firstName = (lead.name || '').split(' ')[0] || lead.name || ''
+    const setterFirstName = (setterName || '').split(' ')[0] || 'Ihr Berater'
+    const dateObj = new Date(lead.appointment_date)
+    const formattedDate = dateObj.toLocaleDateString('de-DE', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    })
+    const formattedTime = dateObj.toLocaleTimeString('de-DE', {
+      hour: '2-digit', minute: '2-digit'
+    })
+    const shortDate = dateObj.toLocaleDateString('de-DE')
+
+    const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
+    const body = `Guten Tag ${firstName},
+
+vielen Dank für Ihr Interesse an unserer Beratung speziell für Hebammen.
+
+Hiermit bestätige ich Ihnen Ihren Termin:
+
+Datum: ${formattedDate}
+Uhrzeit: ${formattedTime} Uhr (ca. 45 Minuten)
+Microsoft Teams: ${lead.teams_link}
+
+Bitte klicken Sie kurz vor dem Termin auf den Teams-Link. Sie benötigen keine Software-Installation – ein aktueller Browser reicht aus.
+
+Sollte ein anderer Termin besser passen, melden Sie sich gerne kurz bei uns.
+
+Mit freundlichen Grüßen
+${setterFirstName}
+für das Hebammen-Beratungsteam
+
+--
+beratung@hebammen-vorsorge.de
+www.hebammen-vorsorge.de`
+
+    // mailto:-URL oeffnet das Standard-Mailprogramm (Apple Mail, Outlook, iOS Mail).
+    // Funktioniert geraeteuebergreifend, kein Gmail-Login noetig.
+    const mailtoUrl = `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.location.href = mailtoUrl
+  }
+
   async function clearAppointment() {
     setSavingDate(true)
-    const { data, error } = await supabase.from('leads').update({ appointment_date: null }).eq('id', lead.id).select().single()
+    const { data, error } = await supabase
+      .from('leads')
+      .update({ appointment_date: null, teams_link: null })
+      .eq('id', lead.id)
+      .select()
+      .single()
     if (error) { toast.error('Fehler'); setSavingDate(false); return }
-    toast.success('Termin entfernt'); setApptDate(''); setApptTime(''); onUpdate(data as Lead); setSavingDate(false)
+    toast.success('Termin entfernt'); setApptDate(''); setApptTime(''); setTeamsLinkInput(''); onUpdate(data as Lead); setSavingDate(false)
   }
 
   async function clearRecall() {
@@ -208,17 +263,34 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
 
         {/* ANRUFEN + COUNTER */}
         <div className="px-5 py-3 border-b border-gray-100">
-          <a href={`tel:${lead.phone}`} onClick={handleCallClick}
-             className="flex items-center justify-center gap-3 w-full min-h-[52px] p-3.5 bg-[#2E75B6] text-white rounded-xl hover:bg-[#1E3A5F] active:scale-[0.98] transition-all font-semibold text-lg shadow-sm">
+          {/* NACKTER tel:-Link ohne onClick - iOS Safari kann das nicht als "automatischer Anruf" interpretieren */}
+          <a
+            href={`tel:${lead.phone}`}
+            className="flex items-center justify-center gap-3 w-full min-h-[52px] p-3.5 bg-[#2E75B6] text-white rounded-xl hover:bg-[#1E3A5F] active:scale-[0.98] transition-all font-semibold text-lg shadow-sm"
+          >
             <Phone className="w-5 h-5" />
             <span className="tracking-wide">+{lead.phone.replace(/^\+/, '')}</span>
           </a>
-          {callCount > 0 && (
-            <p className="text-[11px] text-gray-500 mt-1.5 text-center">
-              <span className="font-semibold text-gray-700">{callCount}×</span> angerufen
-              {lead.last_call_attempt && <> · zuletzt {formatRelative(lead.last_call_attempt)}</>}
+          {/* Separater Log-Button - User entscheidet selbst wann gezaehlt wird */}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] text-gray-500">
+              {callCount > 0 ? (
+                <>
+                  <span className="font-semibold text-gray-700">{callCount}×</span> angerufen
+                  {lead.last_call_attempt && <> · zuletzt {formatRelative(lead.last_call_attempt)}</>}
+                </>
+              ) : (
+                <span className="text-gray-400">Noch nicht angerufen</span>
+              )}
             </p>
-          )}
+            <button
+              type="button"
+              onClick={handleCallClick}
+              className="text-[11px] font-medium px-2.5 py-1 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 rounded-md transition-all whitespace-nowrap"
+            >
+              + Anruf zählen
+            </button>
+          </div>
         </div>
 
         {/* WHATSAPP TEMPLATES */}
@@ -294,6 +366,17 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
                 className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
             </div>
           </div>
+          <div className="mb-2">
+            <label className="block text-[11px] font-medium text-gray-700 mb-1">Microsoft Teams-Link</label>
+            <input
+              type="url"
+              inputMode="url"
+              placeholder="https://teams.microsoft.com/l/meetup-join/..."
+              value={teamsLinkInput}
+              onChange={e => setTeamsLinkInput(e.target.value)}
+              className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none"
+            />
+          </div>
           <div className="flex gap-2">
             <button onClick={saveAppointment} disabled={savingDate}
               className="flex-1 min-h-[44px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">
@@ -306,6 +389,25 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
               </button>
             )}
           </div>
+          {/* E-MAIL VORBEREITEN - oeffnet Gmail mit vorgefuelltem Entwurf */}
+          {lead.email && lead.teams_link && lead.appointment_date && (
+            <button
+              type="button"
+              onClick={openEmailDraft}
+              className="mt-2 w-full min-h-[44px] py-2 rounded-xl bg-[#2E75B6] hover:bg-[#1E3A5F] active:scale-[0.98] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"
+            >
+              <span>📧</span>
+              <span>Bestätigung per E-Mail vorbereiten</span>
+            </button>
+          )}
+          {/* Hinweis warum Button noch nicht erscheint */}
+          {(!lead.email || !lead.teams_link || !lead.appointment_date) && (lead.appointment_date || teamsLinkInput) && (
+            <p className="mt-2 text-[11px] text-gray-500 leading-snug">
+              {!lead.email && '⚠️ Lead hat keine E-Mail-Adresse'}
+              {lead.email && !lead.appointment_date && '💡 Termin speichern, dann erscheint der E-Mail-Button'}
+              {lead.email && lead.appointment_date && !lead.teams_link && '💡 Teams-Link eintragen + Termin speichern, dann erscheint der E-Mail-Button'}
+            </p>
+          )}
         </div>
 
         {/* NOTIZ */}
