@@ -615,37 +615,17 @@ function ScriptView({ lead, setter }: { lead: Lead; setter: Profile }) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-gray-500">Alle Sektionen ausgeklappt. Tippe zum Zuklappen.</p>
-        <button
-          onClick={() => setClosedIds(closedIds.size === 0 ? new Set(SCRIPT_SECTIONS.map(s => s.id)) : new Set())}
-          className="text-xs text-[#2E75B6] font-medium hover:underline"
-        >
-          {closedIds.size === 0 ? 'Alle zu' : 'Alle auf'}
-        </button>
-      </div>
-      {SCRIPT_SECTIONS.map(section => {
-        const isOpen = !closedIds.has(section.id)
-        return (
-          <div key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
-            <button
-              onClick={() => toggle(section.id)}
-              className="w-full px-3 py-2.5 flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-left"
-            >
-              <span className="font-semibold text-sm text-[#1E3A5F]">
-                {section.emoji} {section.title}
-              </span>
-              {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-            </button>
-            {isOpen && (
-              <div className="px-3 py-3 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed bg-white">
-                {renderTemplate(section.content, lead, setter)}
-              </div>
-            )}
+    <div className="space-y-5">
+      {SCRIPT_SECTIONS.map(section => (
+        <div key={section.id}>
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            {section.title}
+          </h4>
+          <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+            {renderTemplate(section.content, lead, setter)}
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }
