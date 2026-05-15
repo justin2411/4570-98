@@ -13,7 +13,7 @@ export function SetterMain({ children }: { children: React.ReactNode }) {
 
   // Normal: mit Sidebar-Offset, Mobile-Header-Padding, Bottom-Nav-Padding
   return (
-    <main className="lg:ml-64 pt-14 lg:pt-0 pb-20 lg:pb-6">
+    <main className="lg:ml-64 pt-[calc(56px+env(safe-area-inset-top))] lg:pt-0 pb-20 lg:pb-6">
       <div className="p-4 lg:p-6 max-w-7xl mx-auto">
         {children}
       </div>
