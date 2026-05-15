@@ -76,31 +76,31 @@ export const OBJECTIONS: Objection[] = [
     id: 'kein-interesse',
     emoji: '❌',
     title: 'Kein Interesse',
-    answer: 'Verstehe ich, Frau {kunde_nachname}. Ganz kurz nachgefragt — wann haben Sie sich zuletzt überhaupt mal mit dem Thema Altersvorsorge beschäftigt?\n\nWissen Sie, viele Hebammen sagen mir das genauso. Und am Ende der 60 Minuten sind sie ehrlich froh, dass wir\'s gemacht haben. Kostet nichts, völlig unverbindlich. Probieren wir\'s einfach?',
+    answer: 'Verstehe ich, Frau {kunde_nachname}. Ganz kurz nachgefragt — wann haben Sie sich zuletzt überhaupt mal mit dem Thema Altersvorsorge beschäftigt?\n\nWissen Sie was: Genau das sagen mir 9 von 10 Hebammen zuerst. Und am Ende vom Termin sagen die meisten: „warum hab ich das nicht schon früher gemacht". Weil unsere Spezialistin Ihnen ganz konkret zeigt, welche Fördertöpfe der Bund speziell für Hebammen aufgemacht hat — da geht\'s um richtig Geld pro Monat, das aktuell auf der Straße liegt. Kostet nichts, völlig unverbindlich, 60 Minuten online. Sie verlieren nichts — entweder Sie nehmen was mit, oder Sie wissen wenigstens Bescheid. Probieren wir\'s einfach?',
   },
   {
     id: 'keine-zeit',
     emoji: '⏰',
     title: 'Keine Zeit jetzt',
-    answer: 'Klar, das versteh ich. Ganz kurz nur: Es geht wirklich um 2 Minuten am Telefon — reicht das jetzt gerade noch, oder soll ich Sie heute Abend nochmal anrufen? Wann passt\'s Ihnen besser?',
+    answer: 'Klar, das versteh ich total. Ich brauch jetzt auch nur 2 Minuten — den ganzen Termin macht später unsere Spezialistin, und da nehmen Sie sich besser bewusst Zeit für, weil\'s wirklich was bringt. Reicht\'s jetzt gerade noch für 2 Minuten oder soll ich Sie heute Abend nochmal kurz anrufen?',
   },
   {
     id: 'mail',
     emoji: '📧',
     title: 'Schicken Sie Infos',
-    answer: 'Mach ich gerne. Aber ehrlich gesagt — Infos per Mail bringen meist wenig. Jede Hebamme ist in einer anderen Situation. Lassen Sie uns lieber 60 Minuten zusammensetzen, dann kann ich konkret auf Ihre Lage eingehen. Wann hätten Sie\'s denn nächste Woche?',
+    answer: 'Mach ich gerne. Aber ganz ehrlich — Infos per Mail bringen Ihnen relativ wenig. Was bei einer Kollegin in Bayern voll zieht, passt bei Ihnen vielleicht gar nicht. Deshalb haben wir die Spezialistin: Die schaut sich Ihre konkrete Situation an und sagt Ihnen präzise, welche staatliche Förderung Sie als Hebamme bekommen — bis auf den Euro genau. In 60 Minuten haben Sie Klarheit. Sowas kriegen Sie über \'ne Mail nie. Wann hätten Sie\'s denn nächste Woche?',
   },
   {
     id: 'berater',
     emoji: '👥',
     title: 'Habe schon Berater',
-    answer: 'Schön, dann sind Sie ja gut aufgestellt. Trotzdem — eine zweite Meinung schadet nie. Wir sehen oft, dass bei staatlicher Förderung noch viel ungenutzt liegen bleibt. Sehen Sie\'s einfach wie \'nen kostenlosen Check-Up. 60 Minuten, ohne Verpflichtung.',
+    answer: 'Schön, dann sind Sie ja gut aufgestellt. Aber wissen Sie was wir oft sehen? Klassische Berater kennen sich selten im Detail mit Selbstständigen im Gesundheitsbereich aus — die Förderlandschaft ist da echt speziell. Unsere Spezialistin hat genau das im Fokus, schaut sich auch bestehende Verträge mit an und sieht meistens noch was, wo Förderung ungenutzt liegt. Eine zweite Meinung in 60 Minuten, kostenlos — kann sich für Sie schnell rechnen.',
   },
   {
     id: 'versorgt',
     emoji: '✅',
     title: 'Bin schon versorgt',
-    answer: 'Das freut mich für Sie. Trotzdem — es kommen ständig neue Förderungen dazu, speziell für Selbstständige im Gesundheitsbereich. Ich zeig Ihnen einfach mal was neu ist. Wenn Sie eh alles haben, super. Wenn nicht, haben Sie was gelernt.',
+    answer: 'Das freut mich für Sie. Aber ganz ehrlich — der Bund hat letztes Jahr und auch 2026 wieder neue Fördertöpfe extra für Selbstständige im Gesundheitswesen aufgemacht. Die meisten Hebammen wissen das nicht mal. Unsere Spezialistin schaut im Termin einfach drüber, ob da noch was Aktuelles für Sie dabei ist. Wenn nicht — super, dann sind Sie wirklich top versorgt. Wenn doch — haben Sie was Konkretes gewonnen.',
   },
   {
     id: 'nummer',
@@ -112,13 +112,19 @@ export const OBJECTIONS: Objection[] = [
     id: 'ueberlegen',
     emoji: '🤔',
     title: 'Ich überleg\'s mir',
-    answer: 'Klar, kann ich nachvollziehen. Aber ganz ehrlich Frau {kunde_nachname} — Sie wissen ja selbst, im Alltag geht das schnell unter. Lassen Sie uns lieber direkt einen unverbindlichen Termin festmachen. Wenn Sie nach der Beratung sagen „passt nicht für mich" — dann passt es nicht. Aber Sie haben dann zumindest die Infos. Wann hätten Sie nächste Woche Zeit?',
+    answer: 'Klar, das kann ich nachvollziehen. Aber Frau {kunde_nachname}, ganz ehrlich — überlegen Sie\'s sich doch erst NACH dem Termin. Vorher überlegen heißt: Sie wissen ja noch gar nicht worüber genau. Die Spezialistin zeigt Ihnen erstmal, was es konkret für Sie gibt — und dann haben Sie alle Fakten zum Abwägen. Wenn Sie nach 60 Minuten sagen „passt nicht für mich" — alles gut, dann passt es nicht. Aber Sie wissen wenigstens worüber Sie entscheiden. Wann hätten Sie nächste Woche?',
   },
   {
     id: 'kosten',
     emoji: '💰',
     title: 'Was kostet das?',
-    answer: 'Die Beratung ist komplett kostenlos und unverbindlich. Wir verdienen erst dann was, wenn wir Ihnen wirklich was vermitteln, das zu Ihnen passt. Wenn nicht — dann nicht.',
+    answer: 'Die Beratung mit unserer Spezialistin ist komplett kostenlos und unverbindlich. Wir verdienen erst dann etwas, wenn die Spezialistin Ihnen wirklich etwas vermittelt, das zu Ihnen passt. Wenn nicht — dann nicht. Aber wertvoll ist der Termin für Sie auf jeden Fall: Sie wissen danach genau, welche staatliche Förderung Ihnen zusteht. Egal ob Sie was abschließen oder nicht — diese Klarheit nehmen Sie mit.',
+  },
+  {
+    id: 'detail-frage',
+    emoji: '🔍',
+    title: 'Detail-Frage zum Thema',
+    answer: 'Gute Frage — und ehrlich gesagt, genau dafür haben wir die Spezialistin. Da gibt\'s so viele Details speziell für Hebammen, dass ich Ihnen jetzt am Telefon nichts Falsches sagen will. Aber wenn die Frage Sie umtreibt, ist das genau der richtige Punkt für die 60 Minuten. Da kriegen Sie die Antwort konkret, richtig und passgenau für Ihre Situation. Wann passt Ihnen der Termin?',
   },
 ]
 
