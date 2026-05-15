@@ -8,6 +8,7 @@ import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, 
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
 import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
+import { CloserNotify } from '@/components/closer-notify'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -1026,6 +1027,15 @@ function PostTerminModal({ lead, setter, onContinue }: {
               <span className="text-gray-800 font-medium">Microsoft Teams</span>
             </div>
           </div>
+        </div>
+
+        {/* Closer benachrichtigen */}
+        <div className="px-5 pt-5">
+          <CloserNotify
+            lead={lead}
+            setterName={setter.full_name}
+            teamsLink={setter.teams_room_url}
+          />
         </div>
 
         {/* Bestätigung senden */}
