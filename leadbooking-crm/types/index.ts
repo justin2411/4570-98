@@ -17,15 +17,15 @@ export interface Profile {
   avatar_color: string
   is_active: boolean
   created_at: string
-  role_title: string | null
-  teams_room_url: string | null
-  phone_direct: string | null
-  custom_signature: string | null
-  use_custom_signature: boolean
-  custom_templates: Record<string, { use_custom: boolean; text?: string; subject?: string; body?: string }> | null
-  // Cockpit-Settings
-  daily_goal: number
-  sound_enabled: boolean
+  // Setter-Profil
+  role_title?: string | null
+  teams_room_url?: string | null
+  phone_direct?: string | null
+  custom_signature?: string | null
+  use_custom_signature?: boolean
+  custom_templates?: Record<string, string> | null
+  daily_goal?: number | null
+  sound_enabled?: boolean
 }
 
 export interface Lead {
@@ -44,12 +44,14 @@ export interface Lead {
   appointment_date: string | null
   recall_date: string | null
   notes: string | null
-  call_attempts: number
-  last_call_attempt: string | null
-  teams_link: string | null
+  call_attempts?: number
+  last_call_attempt?: string | null
+  teams_link?: string | null
+  closer_id?: string | null
   created_at: string
   updated_at: string
   profiles?: Profile
+  closers?: Closer
 }
 
 export interface ActivityLog {
@@ -84,6 +86,16 @@ export interface LeaderboardEntry {
   appointments_done: number
   points: number
   show_rate: number
+}
+
+// NEU: Closer (Beraterin / Spezialistin)
+export interface Closer {
+  id: string
+  name: string
+  email: string
+  phone: string
+  is_active: boolean
+  created_at: string
 }
 
 export const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bg: string; emoji: string }> = {
