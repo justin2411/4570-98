@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 
 /**
  * Logo mit dynamischen Setter-Initialen.
- * Statt fixer "LC" zeigt das blaue Quadrat die Initialen des aktuellen Users:
  *   "Justin Koch" → "JK"
  *   "Jonas Tamele" → "JT"
  *   "Anna Lisa Müller" → "AM" (erstes + letztes Wort)
@@ -22,7 +21,8 @@ function getInitials(name: string | null | undefined): string {
 
 export function Logo({
   light,
-  mobileCompact,
+  // mobileCompact bleibt als Prop für Backward-Compat, wird aber ignoriert
+  mobileCompact: _mobileCompact,
   className,
 }: {
   light?: boolean
@@ -65,14 +65,7 @@ export function Logo({
         <span className="text-white font-bold text-sm">{initials}</span>
       </div>
       <span className={cn('font-bold text-lg', light ? 'text-white' : 'text-[#1E3A5F]')}>
-        {mobileCompact ? (
-          <>
-            <span className="hidden sm:inline">Hebammen-Vorsorge CRM</span>
-            <span className="sm:hidden">CRM</span>
-          </>
-        ) : (
-          'Hebammen-Vorsorge CRM'
-        )}
+        CRM
       </span>
     </div>
   )
