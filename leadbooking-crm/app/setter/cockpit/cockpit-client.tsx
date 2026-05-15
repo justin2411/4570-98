@@ -6,8 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
 import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText } from 'lucide-react'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
-import { buildEmailSignature } from '@/lib/email-signature'
-import { applicableTemplates, buildWhatsappUrl } from '@/lib/whatsapp-templates'
+import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -837,66 +836,24 @@ function PostTerminModal({ lead, setter, onContinue }: {
   setter: Profile
   onContinue: () => void
 }) {
-  // Mail-Body bauen
+  // Mail rendern (nutzt custom_templates aus Setter-Profil falls vorhanden)
   function openMail() {
     if (!lead.appointment_date || !lead.email) {
       toast.error('Termin oder E-Mail fehlt')
       return
     }
-    const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p)
-    const lastName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : lead.name || ''
-
-    const dateObj = new Date(lead.appointment_date)
-    const formattedDate = dateObj.toLocaleDateString('de-DE', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    })
-    const formattedTime = dateObj.toLocaleTimeString('de-DE', {
-      hour: '2-digit', minute: '2-digit'
-    })
-    const shortDate = dateObj.toLocaleDateString('de-DE')
-
-    const signature = buildEmailSignature({
-      full_name: setter.full_name || 'Ihr Berater',
-      role_title: setter.role_title || 'Hebammen-Beratungsteam',
-      phone_direct: setter.phone_direct || null,
-      custom_signature: setter.custom_signature || null,
-      use_custom_signature: setter.use_custom_signature || false,
-    })
-
-    const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
-    const body = `Sehr geehrte Frau ${lastName},
-
-vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für Hebammen.
-
-Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
-
-▸ Datum: ${formattedDate}
-▸ Uhrzeit: ${formattedTime} Uhr
-▸ Dauer: ca. 60 Minuten
-▸ Beratungsraum: ${lead.teams_link || ''}
-
-Bitte klicken Sie wenige Minuten vor dem Termin auf den Microsoft Teams-Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
-
-Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns.
-
-Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
-
-Mit freundlichen Grüßen
-
-${signature}`
-
-    const url = `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.location.href = url
+    const { subject, body } = renderEmail(lead, setter)
+    window.location.href = buildMailtoUrl(lead.email, subject, body)
   }
 
-  // WhatsApp-Templates für diesen Lead (Confirmation wenn termin_gelegt)
-  const templates = applicableTemplates(lead)
-  const confirmTemplate = templates.find(t => t.id === 'confirmation') || templates[0]
+  // WhatsApp-Bestätigung rendern (custom oder default)
+  const applicableTpls = applicableWhatsappTemplates(lead)
+  const confirmTpl = applicableTpls.find(t => t.id === 'wa_confirmation') || applicableTpls[0]
 
   function openWhatsapp() {
-    if (!confirmTemplate) return
-    const url = buildWhatsappUrl(lead.phone, confirmTemplate.render(lead, setter.full_name))
-    window.open(url, '_blank')
+    if (!confirmTpl) return
+    const text = renderWhatsapp(confirmTpl.id, lead, setter)
+    window.open(buildWhatsappUrl(lead.phone, text), '_blank')
   }
 
   return (
