@@ -3,8 +3,6 @@ import { buildEmailSignature } from './email-signature'
 
 // ============================================================
 // TEMPLATE-DEFINITIONEN
-// Jedes Template hat: id, label, description, condition (wann anwendbar),
-// + Default-Text mit Platzhaltern wie {kunde}, {termin_datum} etc.
 // ============================================================
 
 export interface TemplateDef {
@@ -17,22 +15,27 @@ export interface TemplateDef {
 }
 
 export interface EmailTemplateDef {
-  id: 'email_body'
+  id: string
   label: string
   emoji: string
   description: string
+  condition: (lead: Lead) => boolean
   defaultSubject: string
   defaultBody: string
 }
 
-// E-Mail Template (genau 1)
-export const EMAIL_TEMPLATE: EmailTemplateDef = {
-  id: 'email_body',
-  label: 'E-Mail Terminbestätigung',
-  emoji: '📧',
-  description: 'Wird nach „Termin gelegt" mit Mail-Programm geöffnet',
-  defaultSubject: 'Bestätigung Ihres Beratungstermins am {termin_kurzdatum}',
-  defaultBody: `Sehr geehrte Frau {kunde_nachname},
+// ============================================================
+// E-MAIL TEMPLATES (3)
+// ============================================================
+export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
+  {
+    id: 'email_confirmation',
+    label: 'E-Mail Terminbestätigung',
+    emoji: '✅',
+    description: 'Direkt nach „Termin gelegt"',
+    condition: (lead) => lead.status === 'termin_gelegt' && !!lead.appointment_date,
+    defaultSubject: 'Bestätigung Ihres Beratungstermins am {termin_kurzdatum}',
+    defaultBody: `Sehr geehrte Frau {kunde_nachname},
 
 vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für Hebammen.
 
@@ -52,9 +55,58 @@ Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
 Mit freundlichen Grüßen
 
 {signature}`,
-}
+  },
+  {
+    id: 'email_reminder',
+    label: 'E-Mail Termin-Erinnerung',
+    emoji: '⏰',
+    description: 'Ein Tag vor dem Termin',
+    condition: (lead) => lead.status === 'termin_gelegt' && !!lead.appointment_date,
+    defaultSubject: 'Erinnerung: Ihr Beratungstermin am {termin_kurzdatum}',
+    defaultBody: `Sehr geehrte Frau {kunde_nachname},
 
-// WhatsApp Templates (5 Stück)
+eine kurze, freundliche Erinnerung an Ihren bevorstehenden Beratungstermin:
+
+▸ Datum: {termin_datum}
+▸ Uhrzeit: {termin_uhrzeit} Uhr
+▸ Beratungsraum: {teams_link}
+
+Bitte klicken Sie wenige Minuten vor Termin-Beginn auf den Microsoft Teams-Link. Eine Installation ist nicht nötig – Sie können direkt im Browser teilnehmen.
+
+Sollten Sie wider Erwarten verhindert sein, melden Sie sich gerne kurz bei uns, damit wir einen neuen Termin finden können.
+
+Ich freue mich auf unser Gespräch!
+
+Mit freundlichen Grüßen
+
+{signature}`,
+  },
+  {
+    id: 'email_no_show',
+    label: 'E-Mail No-Show Nachfassen',
+    emoji: '🤷',
+    description: 'Wenn Hebamme zum Termin nicht erschienen ist',
+    condition: (lead) => lead.status === 'termin_gelegt' || lead.status === 'termin_stattgefunden',
+    defaultSubject: 'Schade — wir haben Sie heute vermisst',
+    defaultBody: `Sehr geehrte Frau {kunde_nachname},
+
+wir haben Sie heute zum vereinbarten Beratungstermin um {termin_uhrzeit} Uhr leider vergeblich erwartet.
+
+Falls etwas Wichtiges dazwischengekommen ist — kein Problem! Das kann jedem mal passieren.
+
+Möchten Sie einen neuen Termin vereinbaren? Antworten Sie einfach kurz auf diese E-Mail mit Ihren Wunschterminen, oder melden Sie sich telefonisch.
+
+Ich würde mich freuen, Sie kennenzulernen und Ihnen die staatlichen Förderungen für Hebammen zu zeigen.
+
+Mit freundlichen Grüßen
+
+{signature}`,
+  },
+]
+
+// ============================================================
+// WHATSAPP TEMPLATES (5)
+// ============================================================
 export const WHATSAPP_TEMPLATES: TemplateDef[] = [
   {
     id: 'wa_confirmation',
@@ -144,7 +196,7 @@ Liebe Grüße
 ]
 
 // ============================================================
-// PLATZHALTER-LISTE für UI-Hinweise
+// PLATZHALTER-LISTE
 // ============================================================
 export const PLACEHOLDERS = [
   { key: '{kunde}', desc: 'Vorname der Hebamme', example: 'Anna' },
@@ -168,8 +220,8 @@ export const PLACEHOLDERS = [
 export interface CustomTemplate {
   use_custom: boolean
   text?: string
-  subject?: string  // nur für email_body
-  body?: string    // nur für email_body
+  subject?: string
+  body?: string
 }
 
 export type CustomTemplates = Record<string, CustomTemplate>
@@ -178,9 +230,6 @@ export type CustomTemplates = Record<string, CustomTemplate>
 // RENDER-LOGIC
 // ============================================================
 
-/**
- * Ersetzt alle Platzhalter durch echte Daten.
- */
 export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>, opts?: { includeSignature?: boolean }): string {
   const setterFull = setter.full_name || 'Ihr Berater'
   const setterFirst = setterFull.split(' ')[0] || 'Ihr Berater'
@@ -227,9 +276,7 @@ export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>
     .replaceAll('{signature}', signature)
 }
 
-/**
- * Liefert den effektiven Template-Text (custom wenn gesetzt, sonst default).
- */
+// WhatsApp helpers
 export function getTemplateText(templateId: string, customTemplates: CustomTemplates | undefined | null): string {
   const custom = customTemplates?.[templateId]
   if (custom?.use_custom && custom.text?.trim()) return custom.text
@@ -237,54 +284,57 @@ export function getTemplateText(templateId: string, customTemplates: CustomTempl
   return def?.defaultText || ''
 }
 
-/**
- * Spezielle Variante für E-Mail (Subject + Body).
- */
-export function getEmailTemplate(customTemplates: CustomTemplates | undefined | null): { subject: string; body: string } {
-  const custom = customTemplates?.['email_body']
+// Email helpers — now takes templateId
+export function getEmailTemplate(
+  templateId: string,
+  customTemplates: CustomTemplates | undefined | null
+): { subject: string; body: string } {
+  // Backward-Compat: alter 'email_body' key gilt als 'email_confirmation'
+  const legacyKey = (templateId === 'email_confirmation' && customTemplates?.['email_body']?.use_custom) ? 'email_body' : null
+  const custom = customTemplates?.[legacyKey || templateId]
+
   if (custom?.use_custom && custom.subject?.trim() && custom.body?.trim()) {
     return { subject: custom.subject, body: custom.body }
   }
-  return { subject: EMAIL_TEMPLATE.defaultSubject, body: EMAIL_TEMPLATE.defaultBody }
+  const def = EMAIL_TEMPLATES.find(t => t.id === templateId)
+  if (!def) {
+    // Fallback (sollte nicht vorkommen)
+    const conf = EMAIL_TEMPLATES.find(t => t.id === 'email_confirmation')!
+    return { subject: conf.defaultSubject, body: conf.defaultBody }
+  }
+  return { subject: def.defaultSubject, body: def.defaultBody }
 }
 
-/**
- * Welche WhatsApp-Templates passen zum aktuellen Lead-Status?
- */
 export function applicableWhatsappTemplates(lead: Lead): TemplateDef[] {
   return WHATSAPP_TEMPLATES.filter(t => t.condition(lead))
 }
 
-/**
- * Komplette WhatsApp-Nachricht rendern (Template-Lookup + Platzhalter).
- */
+export function applicableEmailTemplates(lead: Lead): EmailTemplateDef[] {
+  return EMAIL_TEMPLATES.filter(t => t.condition(lead))
+}
+
 export function renderWhatsapp(templateId: string, lead: Lead, setter: Partial<Profile>): string {
   const text = getTemplateText(templateId, setter.custom_templates as CustomTemplates | undefined)
   return renderMessage(text, lead, setter)
 }
 
-/**
- * Komplette E-Mail rendern.
- */
-export function renderEmail(lead: Lead, setter: Partial<Profile>): { subject: string; body: string } {
-  const { subject: subjT, body: bodyT } = getEmailTemplate(setter.custom_templates as CustomTemplates | undefined)
+export function renderEmail(
+  templateId: string,
+  lead: Lead,
+  setter: Partial<Profile>
+): { subject: string; body: string } {
+  const { subject: subjT, body: bodyT } = getEmailTemplate(templateId, setter.custom_templates as CustomTemplates | undefined)
   return {
     subject: renderMessage(subjT, lead, setter),
     body: renderMessage(bodyT, lead, setter, { includeSignature: true }),
   }
 }
 
-/**
- * Baut wa.me URL die WhatsApp öffnet.
- */
 export function buildWhatsappUrl(phone: string, text: string): string {
   const cleanPhone = (phone || '').replace(/\D/g, '')
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
 }
 
-/**
- * Baut mailto: URL die Mail-Programm öffnet.
- */
 export function buildMailtoUrl(to: string, subject: string, body: string): string {
   return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }

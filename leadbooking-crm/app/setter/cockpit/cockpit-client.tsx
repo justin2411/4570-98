@@ -985,7 +985,7 @@ function PostTerminModal({ lead, setter, onContinue }: {
       toast.error('Termin oder E-Mail fehlt')
       return
     }
-    const { subject, body } = renderEmail(lead, setter)
+    const { subject, body } = renderEmail('email_confirmation', lead, setter)
     window.location.href = buildMailtoUrl(lead.email, subject, body)
     setMailSent(true)
   }

@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
 import {
-  renderEmail, renderWhatsapp, applicableWhatsappTemplates,
-  buildWhatsappUrl, buildMailtoUrl, WHATSAPP_TEMPLATES
+  renderEmail, renderWhatsapp, applicableWhatsappTemplates, applicableEmailTemplates,
+  buildWhatsappUrl, buildMailtoUrl, WHATSAPP_TEMPLATES, EMAIL_TEMPLATES
 } from '@/lib/message-templates'
 import { X, Calendar, Clock, Phone, Mail, MessageSquare, Edit2, Trash2, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -18,7 +18,7 @@ interface Props {
   onDelete?: () => void
 }
 
-type View = 'main' | 'reschedule' | 'cancel' | 'whatsapp_picker'
+type View = 'main' | 'reschedule' | 'cancel' | 'whatsapp_picker' | 'email_picker'
 
 export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }: Props) {
   const supabase = createClient()
@@ -29,14 +29,8 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
   const dateStr = date?.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) || '—'
   const timeStr = date?.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) || '—'
 
-  function openMail() {
-    if (!lead.email) {
-      toast.error('Keine E-Mail-Adresse')
-      return
-    }
-    const { subject, body } = renderEmail(lead, setter)
-    window.location.href = buildMailtoUrl(lead.email, subject, body)
-  }
+  // Mail-Picker öffnen statt direkt
+  // (renderEmail wird im EmailPicker pro Template aufgerufen)
 
   async function rescheduleTo(newDate: string) {
     setSaving(true)
@@ -85,8 +79,9 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
     onClose()
   }
 
-  // Verfügbare WhatsApp-Templates (alle, nicht nur passende)
+  // Verfügbare Templates (alle die zur lead-Situation passen)
   const allWaTemplates = WHATSAPP_TEMPLATES.filter(t => t.condition(lead))
+  const allEmailTemplates = EMAIL_TEMPLATES.filter(t => t.condition(lead))
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3 overflow-y-auto">
@@ -99,6 +94,7 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
             {view === 'reschedule' && '🔄 Termin verschieben'}
             {view === 'cancel' && '🚫 Termin entfernen'}
             {view === 'whatsapp_picker' && '💬 WhatsApp-Nachricht'}
+            {view === 'email_picker' && '📧 E-Mail-Nachricht'}
           </h2>
           <button onClick={view === 'main' ? onClose : () => setView('main')} className="p-1 -mr-1 text-gray-400 hover:text-gray-700">
             <X className="w-5 h-5" />
@@ -168,14 +164,14 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-1">📬 Nachfass-Nachricht senden</div>
 
                 <button
-                  onClick={openMail}
-                  disabled={!lead.email}
+                  onClick={() => setView('email_picker')}
+                  disabled={!lead.email || allEmailTemplates.length === 0}
                   className="w-full p-3 rounded-xl border-2 border-gray-200 hover:border-[#2E75B6] hover:bg-blue-50 flex items-center gap-3 disabled:opacity-50 transition-colors text-left"
                 >
                   <div className="w-9 h-9 rounded-lg bg-[#2E75B6] text-white flex items-center justify-center text-sm shrink-0">📧</div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm text-gray-900">E-Mail Nachfassen</div>
-                    <div className="text-xs text-gray-500 truncate">{lead.email || 'Keine E-Mail vorhanden'}</div>
+                    <div className="text-xs text-gray-500">{allEmailTemplates.length} Vorlagen verfügbar</div>
                   </div>
                   <span className="text-gray-400">›</span>
                 </button>
@@ -248,6 +244,16 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
               lead={lead}
               setter={setter}
               templates={allWaTemplates}
+              onBack={() => setView('main')}
+            />
+          )}
+
+          {/* EMAIL PICKER */}
+          {view === 'email_picker' && (
+            <EmailPicker
+              lead={lead}
+              setter={setter}
+              templates={allEmailTemplates}
               onBack={() => setView('main')}
             />
           )}
@@ -374,6 +380,47 @@ function WhatsappPicker({ lead, setter, templates, onBack }: {
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-sm shrink-0">{t.emoji}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm text-gray-900">{t.label}</div>
+                <div className="text-xs text-gray-500">{t.description}</div>
+              </div>
+              <Send className="w-4 h-4 text-gray-400" />
+            </div>
+          </button>
+        ))}
+      </div>
+      <button onClick={onBack} className="w-full py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">
+        Zurück
+      </button>
+    </div>
+  )
+}
+
+// ============== EMAIL-PICKER ==============
+
+function EmailPicker({ lead, setter, templates, onBack }: {
+  lead: Lead
+  setter: Profile
+  templates: any[]
+  onBack: () => void
+}) {
+  function send(templateId: string) {
+    const { subject, body } = renderEmail(templateId, lead, setter)
+    window.location.href = buildMailtoUrl(lead.email || '', subject, body)
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600">Welche E-Mail senden?</p>
+      <div className="space-y-2">
+        {templates.map(t => (
+          <button
+            key={t.id}
+            onClick={() => send(t.id)}
+            className="w-full p-3 rounded-xl border-2 border-gray-200 hover:border-[#2E75B6] hover:bg-blue-50 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm shrink-0">{t.emoji}</div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm text-gray-900">{t.label}</div>
                 <div className="text-xs text-gray-500">{t.description}</div>

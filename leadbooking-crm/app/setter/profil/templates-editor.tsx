@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Profile, Lead } from '@/types'
 import {
-  EMAIL_TEMPLATE,
+  EMAIL_TEMPLATES,
   WHATSAPP_TEMPLATES,
   PLACEHOLDERS,
   CustomTemplates,
@@ -68,7 +68,7 @@ export function TemplatesEditor({ initialTemplates, setterPreview, onChange }: P
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Hilfe-Block */}
       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
         <strong>💡 So funktioniert's:</strong> Klick auf eine Vorlage → Toggle „Eigene Version verwenden" → 
@@ -76,40 +76,57 @@ export function TemplatesEditor({ initialTemplates, setterPreview, onChange }: P
         Die Live-Vorschau zeigt dir wie's mit echten Daten aussieht.
       </div>
 
-      {/* E-Mail Template */}
-      <TemplateRow
-        id={EMAIL_TEMPLATE.id}
-        label={EMAIL_TEMPLATE.label}
-        emoji={EMAIL_TEMPLATE.emoji}
-        description={EMAIL_TEMPLATE.description}
-        isOpen={openId === EMAIL_TEMPLATE.id}
-        onToggleOpen={() => setOpenId(openId === EMAIL_TEMPLATE.id ? null : EMAIL_TEMPLATE.id)}
-        isEmail
-        current={templates[EMAIL_TEMPLATE.id]}
-        defaultSubject={EMAIL_TEMPLATE.defaultSubject}
-        defaultBody={EMAIL_TEMPLATE.defaultBody}
-        setterPreview={setterPreview}
-        onChange={(updates) => updateTemplate(EMAIL_TEMPLATE.id, updates)}
-        onReset={() => reset(EMAIL_TEMPLATE.id)}
-      />
+      {/* E-Mail Section */}
+      <div>
+        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 px-1 flex items-center gap-2">
+          <Mail className="w-3 h-3" /> E-Mail Vorlagen ({EMAIL_TEMPLATES.length})
+        </div>
+        <div className="space-y-2">
+          {EMAIL_TEMPLATES.map(t => (
+            <TemplateRow
+              key={t.id}
+              id={t.id}
+              label={t.label}
+              emoji={t.emoji}
+              description={t.description}
+              isOpen={openId === t.id}
+              onToggleOpen={() => setOpenId(openId === t.id ? null : t.id)}
+              isEmail
+              current={templates[t.id]}
+              defaultSubject={t.defaultSubject}
+              defaultBody={t.defaultBody}
+              setterPreview={setterPreview}
+              onChange={(updates) => updateTemplate(t.id, updates)}
+              onReset={() => reset(t.id)}
+            />
+          ))}
+        </div>
+      </div>
 
-      {/* WhatsApp Templates */}
-      {WHATSAPP_TEMPLATES.map(t => (
-        <TemplateRow
-          key={t.id}
-          id={t.id}
-          label={t.label}
-          emoji={t.emoji}
-          description={t.description}
-          isOpen={openId === t.id}
-          onToggleOpen={() => setOpenId(openId === t.id ? null : t.id)}
-          current={templates[t.id]}
-          defaultText={t.defaultText}
-          setterPreview={setterPreview}
-          onChange={(updates) => updateTemplate(t.id, updates)}
-          onReset={() => reset(t.id)}
-        />
-      ))}
+      {/* WhatsApp Section */}
+      <div>
+        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 px-1 flex items-center gap-2">
+          <MessageSquare className="w-3 h-3" /> WhatsApp Vorlagen ({WHATSAPP_TEMPLATES.length})
+        </div>
+        <div className="space-y-2">
+          {WHATSAPP_TEMPLATES.map(t => (
+            <TemplateRow
+              key={t.id}
+              id={t.id}
+              label={t.label}
+              emoji={t.emoji}
+              description={t.description}
+              isOpen={openId === t.id}
+              onToggleOpen={() => setOpenId(openId === t.id ? null : t.id)}
+              current={templates[t.id]}
+              defaultText={t.defaultText}
+              setterPreview={setterPreview}
+              onChange={(updates) => updateTemplate(t.id, updates)}
+              onReset={() => reset(t.id)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -139,7 +156,6 @@ function TemplateRow(props: RowProps) {
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-      {/* Header */}
       <button
         onClick={props.onToggleOpen}
         className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-left"
@@ -159,10 +175,8 @@ function TemplateRow(props: RowProps) {
         </div>
       </button>
 
-      {/* Body */}
       {props.isOpen && (
         <div className="p-4 space-y-3 border-t border-gray-200">
-          {/* Toggle */}
           <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
             <input
               type="checkbox"
@@ -188,7 +202,6 @@ function TemplateRow(props: RowProps) {
             )}
           </label>
 
-          {/* Editor + Preview (nur wenn useCustom aktiv) */}
           {useCustom ? (
             <CustomEditor {...props} />
           ) : (
@@ -213,8 +226,6 @@ function TemplateRow(props: RowProps) {
   )
 }
 
-// ============== CUSTOM EDITOR mit Live-Preview ==============
-
 function CustomEditor(props: RowProps) {
   const subject = props.current?.subject ?? props.defaultSubject ?? ''
   const text = props.isEmail ? (props.current?.body ?? props.defaultBody ?? '') : (props.current?.text ?? props.defaultText ?? '')
@@ -227,13 +238,11 @@ function CustomEditor(props: RowProps) {
     }
   }
 
-  // Live-Preview
   const renderedSubject = props.isEmail ? renderMessage(subject, PREVIEW_LEAD, props.setterPreview) : ''
   const renderedText = renderMessage(text, PREVIEW_LEAD, props.setterPreview, { includeSignature: props.isEmail })
 
   return (
     <div className="space-y-3">
-      {/* Subject (nur E-Mail) */}
       {props.isEmail && (
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Betreff</label>
@@ -246,7 +255,6 @@ function CustomEditor(props: RowProps) {
         </div>
       )}
 
-      {/* Body / Text */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">
           {props.isEmail ? 'Nachrichten-Text' : 'Text'}
@@ -259,7 +267,6 @@ function CustomEditor(props: RowProps) {
         />
       </div>
 
-      {/* Placeholder Buttons */}
       <div>
         <div className="text-xs font-medium text-gray-700 mb-1.5">Platzhalter einfügen (Klick = ans Ende):</div>
         <div className="flex flex-wrap gap-1.5">
@@ -277,7 +284,6 @@ function CustomEditor(props: RowProps) {
         </div>
       </div>
 
-      {/* Live Preview */}
       <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
         <div className="text-xs font-semibold text-green-900 mb-2">
           🔍 Live-Vorschau mit Beispiel-Lead „Anna Müller":
