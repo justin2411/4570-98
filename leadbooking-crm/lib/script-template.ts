@@ -31,7 +31,7 @@ export const SCRIPT_SECTIONS: ScriptSection[] = [
     id: 'hook',
     emoji: '🤝',
     title: 'Hook & Kooperation',
-    content: 'Ganz kurz, damit Sie mich einordnen: Wir arbeiten in einer offiziellen Kooperation mit der Hebammen-Koordinierungsstelle in {bundesland} zusammen. Im Rahmen dieser Kooperation melden wir uns einmal persönlich bei allen Hebammen im Verband — Sie sind eine davon.',
+    content: 'Ganz kurz, damit Sie mich einordnen: Wir arbeiten in einer offiziellen Kooperation mit der Hebammen-Verband in {bundesland} zusammen. Im Rahmen dieser Kooperation melden wir uns einmal persönlich bei allen Hebammen im Verband — Sie sind eine davon.',
   },
   {
     id: 'problem',
