@@ -968,7 +968,18 @@ function PostTerminModal({ lead, setter, onContinue }: {
   setter: Profile
   onContinue: () => void
 }) {
-  // Mail rendern (nutzt custom_templates aus Setter-Profil falls vorhanden)
+  const [mailSent, setMailSent] = useState(false)
+  const [waSent, setWaSent] = useState(false)
+
+  // Termin-Datum schön formatiert
+  const dateObj = lead.appointment_date ? new Date(lead.appointment_date) : null
+  const formattedDate = dateObj?.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) || ''
+  const formattedTime = dateObj?.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) || ''
+
+  // WhatsApp-Templates (custom oder default)
+  const applicableTpls = applicableWhatsappTemplates(lead)
+  const confirmTpl = applicableTpls.find(t => t.id === 'wa_confirmation') || applicableTpls[0]
+
   function openMail() {
     if (!lead.appointment_date || !lead.email) {
       toast.error('Termin oder E-Mail fehlt')
@@ -976,58 +987,127 @@ function PostTerminModal({ lead, setter, onContinue }: {
     }
     const { subject, body } = renderEmail(lead, setter)
     window.location.href = buildMailtoUrl(lead.email, subject, body)
+    setMailSent(true)
   }
 
-  // WhatsApp-Bestätigung rendern (custom oder default)
-  const applicableTpls = applicableWhatsappTemplates(lead)
-  const confirmTpl = applicableTpls.find(t => t.id === 'wa_confirmation') || applicableTpls[0]
-
   function openWhatsapp() {
-    if (!confirmTpl) return
+    if (!confirmTpl) {
+      toast.error('Kein WhatsApp-Template verfügbar')
+      return
+    }
     const text = renderWhatsapp(confirmTpl.id, lead, setter)
     window.open(buildWhatsappUrl(lead.phone, text), '_blank')
+    setWaSent(true)
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl">
-        <div className="text-center mb-4">
-          <div className="text-4xl mb-2">🟡</div>
-          <h2 className="text-lg font-bold text-[#1E3A5F]">Termin gespeichert!</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Jetzt noch die Bestätigung an <strong>{lead.name}</strong> raus:
-          </p>
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 overflow-y-auto">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden my-4">
+        {/* Header — Erfolg */}
+        <div className="bg-gradient-to-br from-green-500 to-green-600 px-5 py-5 text-white text-center">
+          <div className="text-4xl mb-1">🎉</div>
+          <h2 className="text-lg font-bold">Termin gespeichert!</h2>
+          <p className="text-sm text-white/90 mt-0.5">{lead.name}</p>
         </div>
 
-        <div className="space-y-2">
-          <button
-            onClick={openMail}
-            disabled={!lead.email}
-            className="w-full py-3 rounded-xl bg-[#2E75B6] hover:bg-[#1E3A5F] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            📧 Bestätigung per E-Mail senden
-          </button>
-          {!lead.email && <p className="text-xs text-red-600 text-center">Lead hat keine E-Mail-Adresse</p>}
-
-          <button
-            onClick={openWhatsapp}
-            disabled={!confirmTemplate}
-            className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            💬 Bestätigung per WhatsApp senden
-          </button>
+        {/* Termin-Details als schöne Karte */}
+        <div className="px-5 pt-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-base">📅</span>
+              <span className="text-gray-800 font-medium">{formattedDate}</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-base">⏰</span>
+              <span className="text-gray-800 font-medium">{formattedTime} Uhr · 60 Min</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-base">💻</span>
+              <span className="text-gray-800 font-medium">Microsoft Teams</span>
+            </div>
+          </div>
         </div>
 
-        <button
-          onClick={onContinue}
-          className="w-full mt-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
-        >
-          → Zum nächsten Lead
-        </button>
+        {/* Bestätigung senden */}
+        <div className="px-5 pt-5 pb-4">
+          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+            📬 Bestätigung jetzt senden
+          </h3>
 
-        <p className="text-xs text-gray-500 text-center mt-3">
-          💡 Tipp: Beide senden — Hebamme bekommt's auf beiden Kanälen.
-        </p>
+          <div className="space-y-2">
+            {/* Mail Button */}
+            <button
+              onClick={openMail}
+              disabled={!lead.email}
+              className={"w-full text-left p-3.5 rounded-xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed " +
+                (mailSent
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-gray-200 hover:border-[#2E75B6] hover:bg-blue-50 active:scale-[0.98]')}
+            >
+              <div className="flex items-center gap-3">
+                <div className={"w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 " +
+                  (mailSent ? 'bg-green-500 text-white' : 'bg-[#2E75B6] text-white')}>
+                  {mailSent ? '✓' : '📧'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm text-gray-900">
+                    {mailSent ? 'E-Mail gesendet' : 'E-Mail-Bestätigung'}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {lead.email || 'Keine E-Mail-Adresse vorhanden'}
+                  </div>
+                </div>
+                {!mailSent && lead.email && (
+                  <span className="text-gray-400 shrink-0">›</span>
+                )}
+              </div>
+            </button>
+
+            {/* WhatsApp Button */}
+            <button
+              onClick={openWhatsapp}
+              disabled={!confirmTpl}
+              className={"w-full text-left p-3.5 rounded-xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed " +
+                (waSent
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-gray-200 hover:border-green-500 hover:bg-green-50 active:scale-[0.98]')}
+            >
+              <div className="flex items-center gap-3">
+                <div className={"w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 " +
+                  (waSent ? 'bg-green-500 text-white' : 'bg-green-500 text-white')}>
+                  {waSent ? '✓' : '💬'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm text-gray-900">
+                    {waSent ? 'WhatsApp gesendet' : 'WhatsApp-Bestätigung'}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {lead.phone || 'Keine Telefonnummer'}
+                  </div>
+                </div>
+                {!waSent && confirmTpl && (
+                  <span className="text-gray-400 shrink-0">›</span>
+                )}
+              </div>
+            </button>
+          </div>
+
+          {(mailSent && waSent) && (
+            <p className="mt-2 text-xs text-green-700 text-center font-medium">
+              ✓ Beide Bestätigungen verschickt
+            </p>
+          )}
+        </div>
+
+        {/* Continue Button */}
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+          <button
+            onClick={onContinue}
+            className="w-full py-3 rounded-xl bg-[#1E3A5F] hover:bg-[#162940] text-white font-semibold active:scale-[0.98] transition-all"
+          >
+            → Zum nächsten Lead
+          </button>
+        </div>
       </div>
     </div>
   )
