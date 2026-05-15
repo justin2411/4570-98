@@ -160,38 +160,6 @@ Liebe Grüße
 {berater}`,
   },
   {
-    id: 'wa_no_reach',
-    label: 'WhatsApp Nach „Nicht erreicht"',
-    emoji: '🔁',
-    description: 'Wenn Sie die Hebamme nicht erreichen konnten',
-    condition: () => true,
-    defaultText: `Hallo Frau {kunde_nachname} 😊
-
-ich hatte gerade versucht Sie zu erreichen wegen Ihrer Anfrage zur kostenlosen Finanz-Beratung für Hebammen.
-
-Wann hätten Sie heute oder morgen kurz 10 Minuten Zeit für ein Telefonat?
-
-Liebe Grüße
-{berater}
-von Hebammen-Vorsorge`,
-  },
-  {
-    id: 'wa_first_contact',
-    label: 'WhatsApp Erstkontakt',
-    emoji: '👋',
-    description: 'Erste Kontaktaufnahme nach Lead-Eingang',
-    condition: (lead) => lead.status === 'neu' || lead.status === 'angerufen',
-    defaultText: `Hallo Frau {kunde_nachname} 😊
-
-Sie hatten Interesse an einer kostenlosen Finanz-Beratung speziell für Hebammen gezeigt. Schön dass Sie dabei sind!
-
-Wann hätten Sie heute oder morgen ca. 10 Minuten Zeit für ein kurzes Telefonat zum Kennenlernen?
-
-Liebe Grüße
-{berater}
-von Hebammen-Vorsorge`,
-  },
-  {
     id: 'wa_no_show',
     label: 'WhatsApp No-Show Followup',
     emoji: '🤷',
