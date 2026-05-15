@@ -26,6 +26,8 @@ export function ProfileForm({ profile }: Props) {
   const [customTemplates, setCustomTemplates] = useState<CustomTemplates>(
     (profile.custom_templates as CustomTemplates) || {}
   )
+  const [dailyGoal, setDailyGoal] = useState(profile.daily_goal ?? 10)
+  const [soundEnabled, setSoundEnabled] = useState(profile.sound_enabled ?? true)
 
   // Live-Preview Signatur
   const previewSignature = buildEmailSignature({
@@ -57,6 +59,8 @@ export function ProfileForm({ profile }: Props) {
         custom_signature: customSignature.trim() || null,
         use_custom_signature: useCustom,
         custom_templates: customTemplates,
+        daily_goal: dailyGoal,
+        sound_enabled: soundEnabled,
       })
       .eq('id', profile.id)
 
@@ -128,6 +132,43 @@ export function ProfileForm({ profile }: Props) {
         <div className="mt-3 p-3 bg-gray-50 rounded-lg">
           <div className="text-xs font-semibold text-gray-600 mb-1.5">🔍 So sieht deine Signatur aus:</div>
           <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">{previewSignature}</pre>
+        </div>
+      </section>
+
+      {/* Cockpit-Settings */}
+      <section className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="text-base font-semibold text-[#1E3A5F] mb-4">⚡ Cockpit-Einstellungen</h2>
+        <div className="space-y-4">
+          <div>
+            <label className={labelCls}>Tägliches Ziel (Termine pro Tag)</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={30}
+                value={dailyGoal}
+                onChange={e => setDailyGoal(Number(e.target.value))}
+                className="flex-1"
+              />
+              <div className="w-16 text-center font-bold text-lg text-[#1E3A5F]">
+                {dailyGoal}
+              </div>
+            </div>
+            <p className={hintCls}>Der Fortschrittsbalken im Cockpit zeigt dir, wieviel du bis zum Ziel noch brauchst.</p>
+          </div>
+
+          <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={e => setSoundEnabled(e.target.checked)}
+              className="mt-0.5 w-4 h-4"
+            />
+            <div className="flex-1 text-sm">
+              <div className="font-medium text-gray-900">🔔 Erfolgs-Sound bei „Termin gelegt"</div>
+              <div className="text-xs text-gray-600 mt-0.5">Kurzes „Ding-Ding-Ding" beim Speichern eines Termins. Motivierend, kann auch nervig sein — du entscheidest.</div>
+            </div>
+          </label>
         </div>
       </section>
 

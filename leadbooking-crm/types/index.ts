@@ -17,14 +17,15 @@ export interface Profile {
   avatar_color: string
   is_active: boolean
   created_at: string
-  // Setter-Profil-Felder
   role_title: string | null
   teams_room_url: string | null
   phone_direct: string | null
   custom_signature: string | null
   use_custom_signature: boolean
-  // Nachrichten-Vorlagen
   custom_templates: Record<string, { use_custom: boolean; text?: string; subject?: string; body?: string }> | null
+  // Cockpit-Settings
+  daily_goal: number
+  sound_enabled: boolean
 }
 
 export interface Lead {

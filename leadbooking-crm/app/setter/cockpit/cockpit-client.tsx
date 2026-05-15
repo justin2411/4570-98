@@ -4,7 +4,8 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
-import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText } from 'lucide-react'
+import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun } from 'lucide-react'
+import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
 import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import toast from 'react-hot-toast'
@@ -27,6 +28,23 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   const [actionModal, setActionModal] = useState<ActionType>(null)
   const [savingAction, setSavingAction] = useState(false)
   const [todayDone, setTodayDone] = useState(0)
+  const [streak, setStreak] = useState(0)
+  const [dark, setDark] = useState(false)
+  // Dark mode aus localStorage laden
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDark(window.localStorage.getItem('cockpit-dark') === '1')
+    }
+  }, [])
+  function toggleDark() {
+    setDark(d => {
+      const next = !d
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('cockpit-dark', next ? '1' : '0')
+      }
+      return next
+    })
+  }
 
   // Swipe state
   const cardRef = useRef<HTMLDivElement>(null)
@@ -44,8 +62,22 @@ export function CockpitClient({ initialDeck, setter }: Props) {
       .from('activity_log')
       .select('id', { count: 'exact', head: true })
       .eq('setter_id', setter.id)
+      .eq('new_status', 'termin_gelegt')
       .gte('created_at', today.toISOString())
       .then(({ count }) => setTodayDone(count || 0))
+
+    // Streak: hole alle 'termin_gelegt' Dates der letzten 30 Tage
+    const since = new Date(Date.now() - 30 * 86400000).toISOString()
+    supabase
+      .from('activity_log')
+      .select('created_at')
+      .eq('setter_id', setter.id)
+      .eq('new_status', 'termin_gelegt')
+      .gte('created_at', since)
+      .then(({ data }) => {
+        const dates = (data || []).map((r: any) => r.created_at)
+        setStreak(calculateStreak(dates))
+      })
   }, [setter.id, supabase])
 
   function advanceCard() {
@@ -177,9 +209,9 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className={"min-h-screen transition-colors " + (dark ? "bg-gradient-to-br from-gray-900 to-slate-800" : "bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]")} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 text-white">
+      <div className="flex items-center justify-between px-4 py-3 text-white">
         <button
           onClick={() => router.push('/setter')}
           className="p-2 -ml-2 rounded-lg active:bg-white/10"
@@ -187,18 +219,43 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         >
           <X className="w-6 h-6" />
         </button>
-        <div className="text-center">
-          <div className="text-xs text-white/70">Lead</div>
+        <div className="text-center text-xs">
+          <div className="text-white/70">Lead</div>
           <div className="text-sm font-bold">{currentIdx + 1} / {deck.length}</div>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-white/70">Heute</div>
-          <div className="text-sm font-bold">{todayDone} ✓</div>
+        <button
+          onClick={toggleDark}
+          className="p-2 -mr-2 rounded-lg active:bg-white/10"
+          aria-label="Dark Mode umschalten"
+        >
+          {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {/* Streak + Daily-Goal Banner */}
+      <div className="px-4 pb-2">
+        <div className={"flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-white text-xs " + (dark ? "bg-white/5" : "bg-white/10")}>
+          <div className="flex items-center gap-1.5">
+            <span className="text-base">🔥</span>
+            <span><strong>{streak}</strong>-Tage-Streak</span>
+          </div>
+          <div className="flex-1 mx-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-white/70">Heute</span>
+              <span><strong>{todayDone}</strong> / {setter.daily_goal || 10}</span>
+            </div>
+            <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className={"h-full transition-all " + (todayDone >= (setter.daily_goal || 10) ? "bg-green-400" : "bg-yellow-400")}
+                style={{ width: Math.min(100, (todayDone / (setter.daily_goal || 10)) * 100) + '%' }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1 bg-white/20 mx-4 rounded-full overflow-hidden">
+      {/* Deck-Progress */}
+      <div className="h-1 bg-white/10 mx-4 rounded-full overflow-hidden">
         <div
           className="h-full bg-yellow-400 transition-all"
           style={{ width: `${((currentIdx + 1) / deck.length) * 100}%` }}
@@ -221,6 +278,21 @@ export function CockpitClient({ initialDeck, setter }: Props) {
           className="bg-white rounded-2xl shadow-2xl p-6 cursor-grab active:cursor-grabbing select-none"
         >
           <SwipeHints offset={dragOffset} />
+
+          {/* Call-Attempt Badge oben */}
+          {(currentLead.call_attempts || 0) > 0 && (
+            <div className="flex justify-center mb-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-medium">
+                <span>🔁 {currentLead.call_attempts}× versucht</span>
+                {currentLead.last_call_attempt && (
+                  <>
+                    <span className="text-orange-400">·</span>
+                    <span className="text-orange-700">zuletzt {formatRelativeTime(currentLead.last_call_attempt)}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="text-center">
             <h1 className="text-2xl font-bold text-[#1E3A5F]">{currentLead.name}</h1>
@@ -320,6 +392,12 @@ export function CockpitClient({ initialDeck, setter }: Props) {
             if (error) { toast.error('Fehler: ' + error.message); return }
             await logActivity(currentLead.id, 'termin_gelegt', `Termin am ${new Date(date).toLocaleString('de-DE')}`)
             toast.success('🟡 Termin gelegt!')
+            // Erfolgs-Sound (nur wenn aktiviert)
+            if (setter.sound_enabled !== false) {
+              playSuccessSound()
+            }
+            // Heute-Counter und Streak aktualisieren
+            setTodayDone(n => n + 1)
             // Aktualisiere Lead lokal mit appointment_date + teams_link
             setDeck(d => d.map((l, i) => i === currentIdx ? {
               ...l,
@@ -626,6 +704,43 @@ function ObjectionsView({ lead, setter, jumpToId, onJumped }: {
 function NotesView({ lead, setter, supabase, onNotesUpdate }: { lead: Lead; setter: Profile; supabase: any; onNotesUpdate: (notes: string) => void }) {
   const [newNote, setNewNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [listening, setListening] = useState(false)
+  const recognitionRef = useRef<any>(null)
+
+  function startDictation() {
+    const SR: any = (typeof window !== 'undefined') && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+    if (!SR) {
+      toast('🎤 Tipp: Tippe das Mikro auf deiner Tastatur an für iOS-Diktat', { duration: 4000 })
+      return
+    }
+    try {
+      const r = new SR()
+      r.lang = 'de-DE'
+      r.continuous = true
+      r.interimResults = false
+      r.onresult = (e: any) => {
+        let transcript = ''
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) transcript += e.results[i][0].transcript + ' '
+        }
+        if (transcript) {
+          setNewNote(prev => (prev + ' ' + transcript).trim())
+        }
+      }
+      r.onend = () => setListening(false)
+      r.onerror = () => setListening(false)
+      r.start()
+      recognitionRef.current = r
+      setListening(true)
+    } catch {
+      toast.error('Sprach-Erkennung nicht verfügbar')
+    }
+  }
+
+  function stopDictation() {
+    recognitionRef.current?.stop()
+    setListening(false)
+  }
 
   async function appendNote() {
     if (!newNote.trim()) return
@@ -646,13 +761,30 @@ function NotesView({ lead, setter, supabase, onNotesUpdate }: { lead: Lead; sett
 
   return (
     <div className="space-y-3">
-      <textarea
-        value={newNote}
-        onChange={e => setNewNote(e.target.value)}
-        placeholder="Neue Notiz hier eintippen..."
-        rows={4}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
-      />
+      <div className="relative">
+        <textarea
+          value={newNote}
+          onChange={e => setNewNote(e.target.value)}
+          placeholder="Neue Notiz hier eintippen oder 🎤 diktieren..."
+          rows={4}
+          className="w-full px-3 py-2 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
+        />
+        <button
+          onClick={listening ? stopDictation : startDictation}
+          type="button"
+          className={"absolute top-2 right-2 p-2 rounded-full transition-colors " +
+            (listening ? "bg-red-500 text-white animate-pulse" : "bg-gray-100 hover:bg-gray-200 text-gray-700")}
+          aria-label={listening ? "Diktat stoppen" : "Diktat starten"}
+        >
+          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </button>
+      </div>
+      {listening && (
+        <div className="text-xs text-red-600 font-medium flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+          Aufnahme läuft — sprich deutsch
+        </div>
+      )}
       <button
         onClick={appendNote}
         disabled={saving || !newNote.trim()}
