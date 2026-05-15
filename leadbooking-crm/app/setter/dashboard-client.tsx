@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Phone, Calendar, CheckCircle, TrendingUp, Flame } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
 import { LeaderboardTable } from '@/components/leaderboard/table'
+import { UpcomingTermine } from './upcoming-termine'
 
 interface Stats { calls: number; set: number }
 
@@ -37,10 +38,14 @@ export function DashboardClient({ fullName, totalDone, totalSet, streak, stats, 
         <p className="text-gray-700 text-sm mt-1">Dein Überblick</p>
       </div>
 
-      <div className="flex gap-2">
+      {/* Anstehende Termine — prominent oben */}
+      <UpcomingTermine setterId={currentSetterId} />
+
+      {/* Period-Tabs */}
+      <div className="flex gap-2 overflow-x-auto">
         {TABS.map(t => (
           <button key={t.value} onClick={() => setTab(t.value)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${tab === t.value ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${tab === t.value ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
             {t.label}
           </button>
         ))}
