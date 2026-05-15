@@ -2,16 +2,25 @@
 
 import { useEffect } from 'react'
 
+/**
+ * Registriert den Service Worker.
+ * Ersetzt die alte Version - ist robuster und versionsbewusst.
+ */
 export function SWRegister() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator)) return
-    // Erst nach Load registrieren um Page-Performance nicht zu blockieren
-    const onLoad = () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => { /* ignore */ })
-    }
-    if (document.readyState === 'complete') onLoad()
-    else window.addEventListener('load', onLoad, { once: true })
+
+    const timer = setTimeout(() => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .catch((err) => {
+          console.warn('SW registration failed:', err)
+        })
+    }, 1500)
+
+    return () => clearTimeout(timer)
   }, [])
+
   return null
 }
