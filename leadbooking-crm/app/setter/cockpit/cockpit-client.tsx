@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
 import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText } from 'lucide-react'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
+import { buildEmailSignature } from '@/lib/email-signature'
+import { applicableTemplates, buildWhatsappUrl } from '@/lib/whatsapp-templates'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -14,7 +16,7 @@ interface Props {
 }
 
 type DrawerView = 'closed' | 'script' | 'objections' | 'notes'
-type ActionType = 'termin' | 'wiedervorlage' | 'kein_interesse' | null
+type ActionType = 'termin' | 'wiedervorlage' | 'kein_interesse' | 'termin_done' | null
 
 export function CockpitClient({ initialDeck, setter }: Props) {
   const router = useRouter()
@@ -223,13 +225,19 @@ export function CockpitClient({ initialDeck, setter }: Props) {
 
           <div className="text-center">
             <h1 className="text-2xl font-bold text-[#1E3A5F]">{currentLead.name}</h1>
-            <div className="mt-2 flex items-center justify-center gap-3 text-sm text-gray-600">
-              <span>📍 {currentLead.state || '—'}</span>
-              {currentLead.score > 0 && <span>⭐ {currentLead.score}</span>}
+            <div className="mt-2 text-sm text-gray-600">
+              <div className="flex items-center justify-center gap-2">
+                <span>📍 {currentLead.state || '—'}</span>
+                <span className="text-gray-300">·</span>
+                <span>Hebamme</span>
+              </div>
+              {currentLead.email && (
+                <div className="mt-1.5 text-xs text-gray-500 truncate flex items-center justify-center gap-1">
+                  <span>📧</span>
+                  <span>{currentLead.email}</span>
+                </div>
+              )}
             </div>
-            {currentLead.email && (
-              <div className="mt-1 text-xs text-gray-500 truncate">{currentLead.email}</div>
-            )}
           </div>
 
           {/* Big Phone Button */}
@@ -313,6 +321,25 @@ export function CockpitClient({ initialDeck, setter }: Props) {
             if (error) { toast.error('Fehler: ' + error.message); return }
             await logActivity(currentLead.id, 'termin_gelegt', `Termin am ${new Date(date).toLocaleString('de-DE')}`)
             toast.success('🟡 Termin gelegt!')
+            // Aktualisiere Lead lokal mit appointment_date + teams_link
+            setDeck(d => d.map((l, i) => i === currentIdx ? {
+              ...l,
+              status: 'termin_gelegt' as const,
+              appointment_date: date,
+              teams_link: teamsLink || null,
+            } : l))
+            // Wechsle zu Post-Termin-Modal (Mail + WhatsApp anbieten)
+            setActionModal('termin_done')
+          }}
+        />
+      )}
+
+      {/* Post-Termin Modal: Mail + WhatsApp + Weiter */}
+      {actionModal === 'termin_done' && (
+        <PostTerminModal
+          lead={currentLead}
+          setter={setter}
+          onContinue={() => {
             setActionModal(null)
             advanceCard()
           }}
@@ -418,72 +445,169 @@ function Drawer({ view, lead, setter, onClose, supabase, onNotesUpdate }: {
   supabase: any
   onNotesUpdate: (notes: string) => void
 }) {
+  // Active tab innerhalb des Drawers (initial = view aus Parent)
+  const [tab, setTab] = useState<Exclude<DrawerView, 'closed'>>(view === 'closed' ? 'script' : view)
+  // Wenn Einwand aus Skript-Quickbar getappt wird, springen wir mit highlight
+  const [jumpToObjection, setJumpToObjection] = useState<string | null>(null)
+
+  function quickJumpObjection(id: string) {
+    setTab('objections')
+    setJumpToObjection(id)
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end" onClick={onClose}>
       <div
-        className="bg-white w-full rounded-t-3xl max-h-[85vh] overflow-y-auto"
+        className="bg-white w-full rounded-t-3xl max-h-[90vh] flex flex-col"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-          <h2 className="text-base font-bold text-[#1E3A5F]">
-            {view === 'script' && '📖 Telefonskript'}
-            {view === 'objections' && '🛡 Einwand-Behandlung'}
-            {view === 'notes' && '📝 Notizen'}
-          </h2>
-          <button onClick={onClose} className="p-1 -mr-1 text-gray-400 hover:text-gray-700">
-            <X className="w-6 h-6" />
+        {/* Header mit Tabs + Close */}
+        <div className="border-b border-gray-200 px-2 pt-2 flex items-center gap-1">
+          <TabButton active={tab === 'script'} onClick={() => setTab('script')} icon="📖" label="Skript" />
+          <TabButton active={tab === 'objections'} onClick={() => setTab('objections')} icon="🛡" label="Einwände" />
+          <TabButton active={tab === 'notes'} onClick={() => setTab('notes')} icon="📝" label="Notizen" />
+          <button
+            onClick={onClose}
+            className="ml-auto p-2 text-gray-400 hover:text-gray-700"
+            aria-label="Schließen"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="px-4 py-4">
-          {view === 'script' && <ScriptView lead={lead} setter={setter} />}
-          {view === 'objections' && <ObjectionsView lead={lead} setter={setter} />}
-          {view === 'notes' && <NotesView lead={lead} setter={setter} supabase={supabase} onNotesUpdate={onNotesUpdate} />}
+        {/* Scrollbarer Content */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {tab === 'script' && <ScriptView lead={lead} setter={setter} />}
+          {tab === 'objections' && <ObjectionsView lead={lead} setter={setter} jumpToId={jumpToObjection} onJumped={() => setJumpToObjection(null)} />}
+          {tab === 'notes' && <NotesView lead={lead} setter={setter} supabase={supabase} onNotesUpdate={onNotesUpdate} />}
         </div>
+
+        {/* Sticky Einwand-Quickbar — NUR auf Skript-Tab */}
+        {tab === 'script' && (
+          <div className="border-t border-gray-200 bg-gradient-to-r from-red-50 to-orange-50 px-2 py-2">
+            <div className="text-[10px] font-semibold text-gray-600 px-1 mb-1.5 uppercase tracking-wide">
+              🛡 Schnellzugriff Einwände
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+              {OBJECTIONS.map(obj => (
+                <button
+                  key={obj.id}
+                  onClick={() => quickJumpObjection(obj.id)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-red-400 hover:bg-red-50 active:bg-red-100 text-xs font-medium text-gray-700 whitespace-nowrap shadow-sm"
+                >
+                  {obj.emoji} {obj.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        'flex-1 px-3 py-2.5 rounded-t-lg text-sm font-semibold transition-colors ' +
+        (active
+          ? 'bg-[#1E3A5F] text-white'
+          : 'text-gray-600 hover:bg-gray-100')
+      }
+    >
+      <span className="mr-1">{icon}</span>
+      {label}
+    </button>
+  )
+}
+
 function ScriptView({ lead, setter }: { lead: Lead; setter: Profile }) {
-  const [openId, setOpenId] = useState<string | null>('einstieg')
+  // Alle Sections per Default OFFEN. closedIds-Set speichert zugeklappte.
+  const [closedIds, setClosedIds] = useState<Set<string>>(new Set())
+
+  function toggle(id: string) {
+    setClosedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
   return (
     <div className="space-y-2">
-      {SCRIPT_SECTIONS.map(section => (
-        <div key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setOpenId(openId === section.id ? null : section.id)}
-            className="w-full px-3 py-2.5 flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-left"
-          >
-            <span className="font-semibold text-sm text-[#1E3A5F]">
-              {section.emoji} {section.title}
-            </span>
-            {openId === section.id ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-          </button>
-          {openId === section.id && (
-            <div className="px-3 py-3 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed bg-white">
-              {renderTemplate(section.content, lead, setter)}
-            </div>
-          )}
-        </div>
-      ))}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs text-gray-500">Alle Sektionen ausgeklappt. Tippe zum Zuklappen.</p>
+        <button
+          onClick={() => setClosedIds(closedIds.size === 0 ? new Set(SCRIPT_SECTIONS.map(s => s.id)) : new Set())}
+          className="text-xs text-[#2E75B6] font-medium hover:underline"
+        >
+          {closedIds.size === 0 ? 'Alle zu' : 'Alle auf'}
+        </button>
+      </div>
+      {SCRIPT_SECTIONS.map(section => {
+        const isOpen = !closedIds.has(section.id)
+        return (
+          <div key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => toggle(section.id)}
+              className="w-full px-3 py-2.5 flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-left"
+            >
+              <span className="font-semibold text-sm text-[#1E3A5F]">
+                {section.emoji} {section.title}
+              </span>
+              {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+            </button>
+            {isOpen && (
+              <div className="px-3 py-3 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed bg-white">
+                {renderTemplate(section.content, lead, setter)}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-function ObjectionsView({ lead, setter }: { lead: Lead; setter: Profile }) {
+function ObjectionsView({ lead, setter, jumpToId, onJumped }: {
+  lead: Lead
+  setter: Profile
+  jumpToId?: string | null
+  onJumped?: () => void
+}) {
   const [openId, setOpenId] = useState<string | null>(null)
+  const refs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // Wenn von außen ein Einwand gefordert wird (Quickbar im Skript), öffne ihn + scrolle hin
+  useEffect(() => {
+    if (jumpToId) {
+      setOpenId(jumpToId)
+      // Kurz warten bis DOM gerendert, dann scrollen
+      setTimeout(() => {
+        const el = refs.current[jumpToId]
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        onJumped?.()
+      }, 50)
+    }
+  }, [jumpToId, onJumped])
+
   return (
     <div className="grid grid-cols-2 gap-2">
       {OBJECTIONS.map(obj => {
         const isOpen = openId === obj.id
         return (
-          <div key={obj.id} className={isOpen ? 'col-span-2' : ''}>
+          <div
+            key={obj.id}
+            ref={(el) => { refs.current[obj.id] = el }}
+            className={isOpen ? 'col-span-2 scroll-mt-2' : ''}
+          >
             <button
               onClick={() => setOpenId(isOpen ? null : obj.id)}
               className={`w-full p-3 rounded-lg text-left transition-colors ${
-                isOpen ? 'bg-[#1E3A5F] text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                isOpen ? 'bg-[#1E3A5F] text-white ring-2 ring-yellow-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
               }`}
             >
               <div className="text-xs font-semibold">{obj.emoji} {obj.title}</div>
@@ -701,6 +825,120 @@ function WiedervorlageModal({ onClose, onDone }: { onClose: () => void; onDone: 
             {saving ? 'Speichern...' : '✓ Wiedervorlage speichern'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ============== POST-TERMIN MODAL (Mail + WhatsApp) ==============
+
+function PostTerminModal({ lead, setter, onContinue }: {
+  lead: Lead
+  setter: Profile
+  onContinue: () => void
+}) {
+  // Mail-Body bauen
+  function openMail() {
+    if (!lead.appointment_date || !lead.email) {
+      toast.error('Termin oder E-Mail fehlt')
+      return
+    }
+    const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p)
+    const lastName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : lead.name || ''
+
+    const dateObj = new Date(lead.appointment_date)
+    const formattedDate = dateObj.toLocaleDateString('de-DE', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    })
+    const formattedTime = dateObj.toLocaleTimeString('de-DE', {
+      hour: '2-digit', minute: '2-digit'
+    })
+    const shortDate = dateObj.toLocaleDateString('de-DE')
+
+    const signature = buildEmailSignature({
+      full_name: setter.full_name || 'Ihr Berater',
+      role_title: setter.role_title || 'Hebammen-Beratungsteam',
+      phone_direct: setter.phone_direct || null,
+      custom_signature: setter.custom_signature || null,
+      use_custom_signature: setter.use_custom_signature || false,
+    })
+
+    const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
+    const body = `Sehr geehrte Frau ${lastName},
+
+vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für Hebammen.
+
+Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
+
+▸ Datum: ${formattedDate}
+▸ Uhrzeit: ${formattedTime} Uhr
+▸ Dauer: ca. 60 Minuten
+▸ Beratungsraum: ${lead.teams_link || ''}
+
+Bitte klicken Sie wenige Minuten vor dem Termin auf den Microsoft Teams-Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
+
+Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns.
+
+Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
+
+Mit freundlichen Grüßen
+
+${signature}`
+
+    const url = `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.location.href = url
+  }
+
+  // WhatsApp-Templates für diesen Lead (Confirmation wenn termin_gelegt)
+  const templates = applicableTemplates(lead)
+  const confirmTemplate = templates.find(t => t.id === 'confirmation') || templates[0]
+
+  function openWhatsapp() {
+    if (!confirmTemplate) return
+    const url = buildWhatsappUrl(lead.phone, confirmTemplate.render(lead, setter.full_name))
+    window.open(url, '_blank')
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl">
+        <div className="text-center mb-4">
+          <div className="text-4xl mb-2">🟡</div>
+          <h2 className="text-lg font-bold text-[#1E3A5F]">Termin gespeichert!</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Jetzt noch die Bestätigung an <strong>{lead.name}</strong> raus:
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            onClick={openMail}
+            disabled={!lead.email}
+            className="w-full py-3 rounded-xl bg-[#2E75B6] hover:bg-[#1E3A5F] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            📧 Bestätigung per E-Mail senden
+          </button>
+          {!lead.email && <p className="text-xs text-red-600 text-center">Lead hat keine E-Mail-Adresse</p>}
+
+          <button
+            onClick={openWhatsapp}
+            disabled={!confirmTemplate}
+            className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            💬 Bestätigung per WhatsApp senden
+          </button>
+        </div>
+
+        <button
+          onClick={onContinue}
+          className="w-full mt-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+        >
+          → Zum nächsten Lead
+        </button>
+
+        <p className="text-xs text-gray-500 text-center mt-3">
+          💡 Tipp: Beide senden — Hebamme bekommt's auf beiden Kanälen.
+        </p>
       </div>
     </div>
   )
