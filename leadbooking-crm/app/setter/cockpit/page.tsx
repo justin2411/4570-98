@@ -26,7 +26,7 @@ export default async function CockpitPage() {
   }
 
   // Smart-Deck: Wiedervorlagen fällig → nicht_erreicht → neu/angerufen
-  // Limit 50 für die initial-Ladung
+  // Limit 100 für die initial-Ladung
   const now = new Date().toISOString()
 
   const { data: wiedervorlagen } = await supabase
@@ -36,7 +36,7 @@ export default async function CockpitPage() {
     .eq('status', 'wiedervorlage')
     .lte('recall_date', now)
     .order('recall_date', { ascending: true })
-    .limit(50)
+    .limit(100)
 
   const { data: nichtErreicht } = await supabase
     .from('leads')
@@ -44,7 +44,7 @@ export default async function CockpitPage() {
     .eq('assigned_to', user.id)
     .eq('status', 'nicht_erreicht')
     .order('last_call_attempt', { ascending: true, nullsFirst: true })
-    .limit(50)
+    .limit(100)
 
   const { data: neueLeads } = await supabase
     .from('leads')
@@ -52,7 +52,7 @@ export default async function CockpitPage() {
     .eq('assigned_to', user.id)
     .in('status', ['neu', 'angerufen'])
     .order('score', { ascending: false })
-    .limit(50)
+    .limit(100)
 
   // Zusammen-Deck: Wiedervorlagen zuerst, dann nicht_erreicht, dann neu
   // Dedupliziert per ID (sollte eh keine Dopplungen geben)
