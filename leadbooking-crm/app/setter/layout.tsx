@@ -1,24 +1,21 @@
 export const dynamic = 'force-dynamic'
-import { SetterNav } from '@/components/layout/setter-nav'
 
-export default function SetterLayout({ children }: { children: React.ReactNode }) {
+import { SetterNav } from '@/components/layout/setter-nav'
+import { NotificationsProvider } from '@/components/notifications-provider'
+import { SetterMain } from './setter-main'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export default async function SetterLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
   return (
     <div className="min-h-screen bg-gray-50">
       <SetterNav />
-      <main
-        className={[
-          // Desktop: sidebar links, kein top/bottom padding
-          'lg:ml-64 lg:!pt-0 lg:!pb-0',
-          // Mobile: Platz für fixed top bar (56px + safe-area-inset-top)
-          'pt-[calc(3.5rem+env(safe-area-inset-top))]',
-          // Mobile: Platz für fixed bottom nav (64px + safe-area-inset-bottom)
-          'pb-[calc(4rem+env(safe-area-inset-bottom))]',
-        ].join(' ')}
-      >
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-          {children}
-        </div>
-      </main>
+      <SetterMain>{children}</SetterMain>
+      <NotificationsProvider userId={user.id} />
     </div>
   )
 }
