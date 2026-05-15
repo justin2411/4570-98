@@ -44,9 +44,11 @@ Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
 ▸ Datum: {termin_datum}
 ▸ Uhrzeit: {termin_uhrzeit} Uhr
 ▸ Dauer: ca. 60 Minuten
-▸ Beratungsraum: {teams_link}
 
-Bitte klicken Sie wenige Minuten vor dem Termin auf den Microsoft Teams-Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
+🔗 Ihr Microsoft Teams-Beratungsraum:
+{teams_link}
+
+Bitte klicken Sie wenige Minuten vor dem Termin auf den Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
 
 Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns.
 
@@ -69,9 +71,11 @@ eine kurze, freundliche Erinnerung an Ihren bevorstehenden Beratungstermin:
 
 ▸ Datum: {termin_datum}
 ▸ Uhrzeit: {termin_uhrzeit} Uhr
-▸ Beratungsraum: {teams_link}
 
-Bitte klicken Sie wenige Minuten vor Termin-Beginn auf den Microsoft Teams-Link. Eine Installation ist nicht nötig – Sie können direkt im Browser teilnehmen.
+🔗 Ihr Microsoft Teams-Beratungsraum:
+{teams_link}
+
+Bitte klicken Sie wenige Minuten vor Termin-Beginn einfach auf den Link. Eine Installation ist nicht nötig – Sie können direkt im Browser teilnehmen.
 
 Sollten Sie wider Erwarten verhindert sein, melden Sie sich gerne kurz bei uns, damit wir einen neuen Termin finden können.
 
