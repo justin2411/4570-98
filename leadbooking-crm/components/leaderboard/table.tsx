@@ -7,7 +7,8 @@ import { TrendingUp, TrendingDown, Minus, Crown, Info, RefreshCw } from 'lucide-
 
 // ============================================================
 // TIER SYSTEM
-// Basis: Lifetime "termin_gelegt" Summe aus leaderboard_cache
+// Basis: AKTUELLE termin_gelegt + termin_stattgefunden aus leads
+// (Wenn Termin entfernt wird, fliegt er raus → fair für alle)
 // ============================================================
 type Tier = { name: string; emoji: string; min: number; cls: string }
 const TIERS: Tier[] = [
@@ -72,24 +73,44 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
     const yest = new Date(now); yest.setDate(yest.getDate() - 1)
     const yestStr = yest.toISOString().split('T')[0]
 
+    // Setter laden
     const { data: setters } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_color')
       .eq('role', 'setter')
       .eq('is_active', true)
 
+    // Period-Daten aus leaderboard_cache
     const { data: cacheData } = await supabase
       .from('leaderboard_cache')
       .select('setter_id, date, calls_made, appointments_set, appointments_done')
 
+    // *** NEU: Lifetime aus AKTUELLEN leads berechnen ***
+    // → Fair: Wenn Termin entfernt wird, fliegt er aus Lifetime raus
+    const { data: currentLeads } = await supabase
+      .from('leads')
+      .select('assigned_to, status')
+      .in('status', ['termin_gelegt', 'termin_stattgefunden'])
+
+    const lifetimeMap = new Map<string, { set: number; done: number }>()
+    for (const lead of currentLeads ?? []) {
+      if (!lead.assigned_to) continue
+      const cur = lifetimeMap.get(lead.assigned_to) ?? { set: 0, done: 0 }
+      if (lead.status === 'termin_gelegt' || lead.status === 'termin_stattgefunden') cur.set++
+      if (lead.status === 'termin_stattgefunden') cur.done++
+      lifetimeMap.set(lead.assigned_to, cur)
+    }
+
     const map = new Map<string, Entry>()
     for (const s of setters ?? []) {
+      const lt = lifetimeMap.get(s.id) ?? { set: 0, done: 0 }
       map.set(s.id, {
         setter_id: s.id,
         full_name: s.full_name ?? '?',
         avatar_color: s.avatar_color ?? '#2E75B6',
         calls_made: 0, appointments_set: 0, appointments_done: 0,
-        lifetime_set: 0, lifetime_done: 0,
+        lifetime_set: lt.set,      // ← aus aktuellen leads
+        lifetime_done: lt.done,    // ← aus aktuellen leads
       })
     }
 
@@ -98,11 +119,7 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
       const e = map.get(row.setter_id)
       if (!e) continue
 
-      // Lifetime = Summe aller Tage (NIE überschreiben, nur addieren)
-      e.lifetime_set += row.appointments_set
-      e.lifetime_done += row.appointments_done
-
-      // Period = nur Tage im Zeitraum
+      // Period-Werte (Heute/Woche/Monat) weiterhin aus Cache
       if (from === null || row.date >= from) {
         e.calls_made += row.calls_made
         e.appointments_set += row.appointments_set
@@ -127,17 +144,15 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
 
   function triggerReload() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    // 800ms debounce, damit der DB-Trigger nach dem activity_log INSERT
-    // genug Zeit hat, leaderboard_cache zu aktualisieren
     debounceRef.current = setTimeout(() => load(period), 800)
   }
 
   useEffect(() => {
     load(period)
-    // Realtime auf BEIDE Tabellen lauschen - mehr Sicherheit
     const ch = supabase.channel('lb-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard_cache' }, triggerReload)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, triggerReload)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, triggerReload)
       .subscribe()
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -180,18 +195,18 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
 
       {showLegend && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">🏅 Tier-System · Basis: gelegte Termine lebenslang</p>
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">🏅 Tier-System · Basis: aktuelle gelegte Termine</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {TIERS_ASC.map(t => (
               <div key={t.name} className={`px-3 py-3 rounded-lg border-2 text-center ${t.cls}`}>
                 <div className="text-3xl mb-1">{t.emoji}</div>
                 <div className="text-sm font-bold">{t.name}</div>
-                <div className="text-[11px] mt-0.5 opacity-80 font-medium">{tierRange(t)} gelegt</div>
+                <div className="text-[11px] mt-0.5 opacity-80 font-medium">{tierRange(t)} aktiv</div>
               </div>
             ))}
           </div>
           <p className="text-[11px] text-gray-500 mt-3 italic">
-            💡 Sortierung der Rangliste richtet sich nach <strong>stattgefundenen Terminen</strong> im gewählten Zeitraum. Der Tier-Badge zeigt deine lebenslange Leistung an gelegten Terminen.
+            💡 <strong>Aktiv = noch im Status „Termin gelegt" oder „Stattgefunden"</strong>. Entfernte/abgesagte Termine zählen nicht mehr — fair für alle.
           </p>
         </div>
       )}
@@ -222,7 +237,7 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
                 <div className="mt-3 text-xs text-gray-700 space-y-0.5 pt-2 border-t border-gray-100">
                   <p>{e.calls_made} Anrufe · {e.appointments_set} gelegt</p>
                   <p>Show-Rate: <span className="font-semibold text-gray-900">{showRate(e.appointments_set, e.appointments_done)}</span></p>
-                  <p className="text-gray-400 mt-1">{e.lifetime_set} gelegt insgesamt</p>
+                  <p className="text-gray-400 mt-1">{e.lifetime_set} aktiv im System</p>
                 </div>
               </div>
             )
@@ -242,7 +257,7 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Gelegt</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#2E75B6]">Stattgef. ⭐</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Show-Rate</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Lifetime</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Aktiv</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Trend</th>
               </tr>
             </thead>
@@ -281,7 +296,7 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
             </tbody>
           </table>
           <p className="px-4 py-2 text-[10px] text-gray-400 bg-gray-50 border-t border-gray-100">
-            Lifetime = gelegte / stattgefundene Termine seit Account-Erstellung · Werte werden nicht überschrieben, nur durch neue Tage erweitert
+            Aktiv = aktuell im Status „Termin gelegt" oder „Stattgefunden" · Entfernte Termine zählen nicht mehr
           </p>
         </div>
       )}
