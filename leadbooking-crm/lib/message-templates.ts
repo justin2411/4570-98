@@ -122,7 +122,12 @@ vielen Dank für unser Gespräch eben! Hiermit bestätige ich Ihnen Ihren Termin
 ⏰ {termin_uhrzeit} Uhr
 💻 Online via Microsoft Teams
 
-Den Teams-Link bekommen Sie noch separat per E-Mail. Bei Fragen oder falls etwas dazwischenkommt, melden Sie sich gerne jederzeit.
+🔗 Hier ist Ihr Teams-Link:
+{teams_link}
+
+Bitte klicken Sie wenige Minuten vor dem Termin auf den Link — eine Installation ist nicht nötig.
+
+Bei Fragen oder falls etwas dazwischenkommt, melden Sie sich gerne jederzeit.
 
 Liebe Grüße
 {berater}
@@ -139,7 +144,11 @@ von Hebammen-Vorsorge`,
 kurze Erinnerung an unser Beratungsgespräch:
 
 ⏰ {termin_uhrzeit} Uhr
-💻 Den Teams-Link finden Sie in der E-Mail von uns
+
+🔗 Hier ist nochmal Ihr Teams-Link:
+{teams_link}
+
+Einfach kurz vor Termin-Beginn antippen — direkt im Browser, keine Installation nötig.
 
 Falls etwas dazwischenkommt, sagen Sie mir gerne kurz Bescheid. Sonst bis gleich! 🌸
 
