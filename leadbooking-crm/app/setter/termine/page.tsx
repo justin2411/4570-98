@@ -16,17 +16,13 @@ export default async function TerminePage() {
     .eq('id', user.id)
     .single()
 
-  // Lade alle Termine ab heute
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-
+  // Lade ALLE Termine mit Status 'termin_gelegt' — auch ohne Datum oder in der Vergangenheit
   const { data: leads } = await supabase
     .from('leads')
     .select('*')
     .eq('assigned_to', user.id)
     .eq('status', 'termin_gelegt')
-    .gte('appointment_date', now.toISOString())
-    .order('appointment_date', { ascending: true })
+    .order('appointment_date', { ascending: true, nullsFirst: true })
 
   return (
     <TermineClient

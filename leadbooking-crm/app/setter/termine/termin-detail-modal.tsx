@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
 import {
@@ -114,24 +114,43 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
               </div>
 
               {/* Termin-Card */}
-              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 space-y-2">
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-4 h-4 text-yellow-700 shrink-0" />
-                  <span className="text-sm font-semibold text-gray-900">{dateStr}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="w-4 h-4 text-yellow-700 shrink-0" />
-                  <span className="text-sm font-semibold text-gray-900">{timeStr} Uhr · 60 Min</span>
-                </div>
-                {lead.teams_link && (
+              {date ? (
+                <div className={"border-2 rounded-xl p-4 space-y-2 " + (date < new Date() ? "bg-gray-50 border-gray-300" : "bg-yellow-50 border-yellow-200")}>
                   <div className="flex items-center gap-3">
-                    <span className="w-4 text-yellow-700 text-sm shrink-0">💻</span>
-                    <a href={lead.teams_link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
-                      Microsoft Teams öffnen
-                    </a>
+                    <Calendar className={"w-4 h-4 shrink-0 " + (date < new Date() ? "text-gray-500" : "text-yellow-700")} />
+                    <span className="text-sm font-semibold text-gray-900">{dateStr}</span>
+                    {date < new Date() && <span className="ml-auto text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-bold">VERGANGEN</span>}
                   </div>
-                )}
-              </div>
+                  <div className="flex items-center gap-3">
+                    <Clock className={"w-4 h-4 shrink-0 " + (date < new Date() ? "text-gray-500" : "text-yellow-700")} />
+                    <span className="text-sm font-semibold text-gray-900">{timeStr} Uhr · 60 Min</span>
+                  </div>
+                  {lead.teams_link && (
+                    <div className="flex items-center gap-3">
+                      <span className="w-4 text-sm shrink-0">💻</span>
+                      <a href={lead.teams_link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
+                        Microsoft Teams öffnen
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">⚠️</span>
+                    <span className="text-sm font-bold text-orange-900">Kein Datum eingetragen</span>
+                  </div>
+                  <p className="text-xs text-orange-800 mb-3">
+                    Bei diesem Termin fehlt das Datum. Trag es jetzt nach, damit die Bestätigungs-Mail rausgeht und der Termin im Kalender erscheint.
+                  </p>
+                  <button
+                    onClick={() => setView('reschedule')}
+                    className="w-full py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-sm"
+                  >
+                    📅 Datum jetzt eintragen
+                  </button>
+                </div>
+              )}
 
               {/* Contact-Info */}
               <div className="space-y-2 text-sm">
@@ -271,7 +290,17 @@ function RescheduleView({ currentDate, saving, onSave, onBack }: {
   onSave: (newDate: string) => void
   onBack: () => void
 }) {
-  const initial = currentDate ? new Date(currentDate).toISOString().slice(0, 16) : ''
+  // Default: existierendes Datum, oder wenn keins → übermorgen 10:00
+  const initial = useMemo(() => {
+    if (currentDate) {
+      const d = new Date(currentDate)
+      if (d >= new Date()) return d.toISOString().slice(0, 16)
+    }
+    const d = new Date()
+    d.setDate(d.getDate() + 2)
+    d.setHours(10, 0, 0, 0)
+    return d.toISOString().slice(0, 16)
+  }, [currentDate])
   const [newDate, setNewDate] = useState(initial)
 
   return (
