@@ -7,7 +7,7 @@ export function Logo({
 }: {
   light?: boolean
   className?: string
-  /** Wenn true: auf Handys nur "LBCRM", auf Desktop voller Name */
+  /** Wenn true: auf Handys nur "CRM", auf Desktop voller Name */
   mobileCompact?: boolean
 }) {
   return (
@@ -17,7 +17,7 @@ export function Logo({
       </div>
       {mobileCompact ? (
         <span className={cn('font-bold text-lg whitespace-nowrap', light ? 'text-white' : 'text-[#1E3A5F]')}>
-          <span className="sm:hidden">LBCRM</span>
+          <span className="sm:hidden">CRM</span>
           <span className="hidden sm:inline">Leadbooking CRM</span>
         </span>
       ) : (
