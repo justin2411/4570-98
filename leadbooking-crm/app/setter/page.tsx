@@ -4,6 +4,19 @@ import { redirect } from 'next/navigation'
 import { SetterLeaderboard } from './leaderboard'
 import { DashboardClient } from './dashboard-client'
 
+// ============================================================
+// Status, die als "Anruf gemacht" gewertet werden
+// (alle außer 'neu' — der Setter hat den Lead bearbeitet)
+// ============================================================
+const CALL_STATUSES = [
+  'angerufen',
+  'nicht_erreicht',
+  'wiedervorlage',
+  'termin_gelegt',
+  'termin_stattgefunden',
+  'kein_interesse',
+]
+
 export default async function SetterDashboard() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,7 +39,8 @@ export default async function SetterDashboard() {
 
   function calcStats(log: { new_status: string; lead_id: string }[] | null) {
     const l = log ?? []
-    const calls = new Set(l.filter(x => ['angerufen','nicht_erreicht','termin_gelegt','termin_stattgefunden'].includes(x.new_status)).map(x => x.lead_id)).size
+    // Anrufe: jeder Lead, der mind. einmal aus 'neu' rausgekommen ist (zählt jeden Lead nur einmal)
+    const calls = new Set(l.filter(x => CALL_STATUSES.includes(x.new_status)).map(x => x.lead_id)).size
     const set = new Set(l.filter(x => x.new_status === 'termin_gelegt').map(x => x.lead_id)).size
     return { calls, set }
   }

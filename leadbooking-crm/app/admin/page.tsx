@@ -6,6 +6,19 @@ import { StatCard } from '@/components/ui/stat-card'
 import { LeaderboardTable } from '@/components/leaderboard/table'
 import { DashboardActivities, ActivityItem } from './dashboard-activities'
 
+// ============================================================
+// Status, die als "Anruf gemacht" gewertet werden
+// (alle außer 'neu' — der Setter hat den Lead bearbeitet)
+// ============================================================
+const CALL_STATUSES = [
+  'angerufen',
+  'nicht_erreicht',
+  'wiedervorlage',
+  'termin_gelegt',
+  'termin_stattgefunden',
+  'kein_interesse',
+]
+
 export default async function AdminDashboard() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -37,7 +50,7 @@ export default async function AdminDashboard() {
       .lt('recall_date', tomorrowStr),
   ])
 
-  const callsToday = new Set((todayLog ?? []).filter(x => ['angerufen','nicht_erreicht','wiedervorlage','termin_gelegt','termin_stattgefunden'].includes(x.new_status)).map(x => x.lead_id)).size
+  const callsToday = new Set((todayLog ?? []).filter(x => CALL_STATUSES.includes(x.new_status)).map(x => x.lead_id)).size
   const terminToday = new Set((todayLog ?? []).filter(x => x.new_status === 'termin_stattgefunden').map(x => x.lead_id)).size
 
   const activities: ActivityItem[] = (recentActivity ?? []).map((log: Record<string, unknown>) => {
