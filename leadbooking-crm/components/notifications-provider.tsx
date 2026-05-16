@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Bell, BellOff } from 'lucide-react'
 
@@ -10,20 +10,20 @@ interface Props {
 
 type PermissionState = 'default' | 'granted' | 'denied' | 'unsupported'
 
+// Polling: alle 5 Minuten reicht für Wiedervorlagen + Termin-Erinnerungen
+const POLL_INTERVAL_MS = 5 * 60 * 1000
+
 export function NotificationsProvider({ userId }: Props) {
   const supabase = createClient()
   const [permission, setPermission] = useState<PermissionState>('default')
   const [showBanner, setShowBanner] = useState(false)
-  const lastCheckRef = useRef<Date>(new Date())
 
   // Permission-Status beim Mount lesen
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!('Notification' in window)) { setPermission('unsupported'); return }
     setPermission(Notification.permission as PermissionState)
-    // Banner zeigen wenn noch nie gefragt
     if (Notification.permission === 'default') {
-      // Nach 5 Sekunden anzeigen — nicht direkt beim Login
       const t = setTimeout(() => setShowBanner(true), 5000)
       return () => clearTimeout(t)
     }
@@ -36,7 +36,7 @@ export function NotificationsProvider({ userId }: Props) {
     setShowBanner(false)
     if (result === 'granted') {
       new Notification('🎉 Benachrichtigungen aktiv', {
-        body: 'Du wirst informiert bei neuen Leads und fälligen Wiedervorlagen.',
+        body: 'Du wirst informiert bei neuen Leads, fälligen Wiedervorlagen und anstehenden Terminen.',
         icon: '/favicon.ico',
       })
     }
@@ -44,32 +44,36 @@ export function NotificationsProvider({ userId }: Props) {
 
   function showLocalNotification(title: string, body: string, tag: string) {
     if (permission !== 'granted') return
-    // Per Tag verhindert dass dieselbe Notification mehrfach erscheint
     try {
       new Notification(title, { body, icon: '/favicon.ico', tag, requireInteraction: false })
     } catch (_) { /* ignore */ }
   }
 
-  // 1) Realtime: neue Leads, die diesem Setter zugewiesen werden
+  // Deduplikation per localStorage — verhindert dass dieselbe Notification
+  // beim nächsten Polling oder nach Page-Reload nochmal aufpoppt.
+  // Returnt true wenn bereits notified, false wenn neu.
+  function alreadyNotified(tag: string): boolean {
+    if (typeof window === 'undefined') return true
+    if (localStorage.getItem(tag)) return true
+    try { localStorage.setItem(tag, '1') } catch (_) {}
+    return false
+  }
+
+  // ============================================================
+  // 1) Neue Leads — Realtime INSERT
+  //    (UPDATE-Listener wurde entfernt: triggerte fälschlich bei
+  //     jedem Status-Wechsel weil Supabase Realtime den alten
+  //     assigned_to-Wert nicht zuverlässig liefert)
+  // ============================================================
   useEffect(() => {
     if (permission !== 'granted') return
 
-    const ch = supabase.channel(`notif-setter-${userId}`)
+    const ch = supabase.channel(`notif-new-leads-${userId}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'leads', filter: `assigned_to=eq.${userId}` },
         (payload) => {
           const lead = payload.new as { id: string; name: string }
           showLocalNotification('🆕 Neuer Lead', lead.name, `lead-new-${lead.id}`)
-        })
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'leads', filter: `assigned_to=eq.${userId}` },
-        (payload) => {
-          const newLead = payload.new as { id: string; name: string; assigned_to: string }
-          const oldLead = payload.old as { assigned_to?: string }
-          // Nur wenn der Lead NEU diesem Setter zugewiesen wurde
-          if (oldLead.assigned_to !== userId && newLead.assigned_to === userId) {
-            showLocalNotification('🆕 Lead dir zugewiesen', newLead.name, `lead-assigned-${newLead.id}`)
-          }
         })
       .subscribe()
 
@@ -77,42 +81,67 @@ export function NotificationsProvider({ userId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, permission])
 
-  // 2) Polling für fällige Wiedervorlagen (Realtime kann das nicht ohne Cron)
+  // ============================================================
+  // 2) Polling: fällige Wiedervorlagen + Termine in den nächsten 24h
+  // ============================================================
   useEffect(() => {
     if (permission !== 'granted') return
 
     async function checkDue() {
       const now = new Date()
-      const since = lastCheckRef.current.toISOString()
-      const until = now.toISOString()
-      const { data } = await supabase
+      const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
+      // ---- A) Fällige Wiedervorlagen (recall_date <= jetzt) ----
+      const { data: recalls } = await supabase
         .from('leads')
         .select('id, name, recall_date')
         .eq('assigned_to', userId)
         .eq('status', 'wiedervorlage')
-        .gte('recall_date', since)
-        .lte('recall_date', until)
+        .lte('recall_date', now.toISOString())
 
-      if (data && data.length > 0) {
-        for (const lead of data) {
-          const key = `recall-${lead.id}-${lead.recall_date}`
-          // localStorage verhindert Doppel-Notifications nach Page-Reload
-          if (typeof window !== 'undefined' && !localStorage.getItem(key)) {
-            showLocalNotification('⏰ Wiedervorlage fällig', lead.name, key)
-            try { localStorage.setItem(key, '1') } catch (_) {}
+      if (recalls) {
+        for (const lead of recalls) {
+          // Tag enthält recall_date → bei Verschiebung neuer Tag
+          const tag = `recall-${lead.id}-${lead.recall_date}`
+          if (!alreadyNotified(tag)) {
+            showLocalNotification('⏰ Wiedervorlage fällig', lead.name, tag)
           }
         }
       }
-      lastCheckRef.current = now
+
+      // ---- B) Anstehende Termine in den nächsten 24h ----
+      const { data: appts } = await supabase
+        .from('leads')
+        .select('id, name, appointment_date')
+        .eq('assigned_to', userId)
+        .eq('status', 'termin_gelegt')
+        .gte('appointment_date', now.toISOString())
+        .lte('appointment_date', in24h.toISOString())
+
+      if (appts) {
+        for (const lead of appts) {
+          // Tag mit Termin-Datum → bei Verschiebung neuer Tag
+          const tag = `appt-${lead.id}-${lead.appointment_date}`
+          if (!alreadyNotified(tag)) {
+            const dt = new Date(lead.appointment_date!)
+            const timeStr = dt.toLocaleString('de-DE', {
+              weekday: 'long',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+            showLocalNotification('📅 Termin steht an', `${lead.name} — ${timeStr}`, tag)
+          }
+        }
+      }
     }
 
-    checkDue() // sofort einmal
-    const interval = setInterval(checkDue, 60_000) // dann jede Minute
+    checkDue() // sofort einmal beim Mount
+    const interval = setInterval(checkDue, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, permission])
 
-  // Banner zum Aktivieren
+  // Banner zum Aktivieren (nur beim ersten Login)
   if (!showBanner || permission !== 'default') return null
 
   return (
@@ -124,7 +153,7 @@ export function NotificationsProvider({ userId }: Props) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm text-[#1E3A5F]">Benachrichtigungen aktivieren?</p>
-          <p className="text-xs text-gray-600 mt-1">Werde sofort informiert bei neuen Leads und fälligen Wiedervorlagen.</p>
+          <p className="text-xs text-gray-600 mt-1">Werde informiert bei neuen Leads, fälligen Wiedervorlagen und anstehenden Terminen.</p>
           <div className="flex gap-2 mt-3">
             <button onClick={askPermission} className="flex-1 px-3 py-2 bg-[#2E75B6] text-white rounded-lg text-sm font-semibold hover:bg-[#1E3A5F]">
               Aktivieren
