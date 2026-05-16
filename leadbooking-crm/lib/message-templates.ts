@@ -25,7 +25,7 @@ export interface EmailTemplateDef {
 }
 
 // ============================================================
-// E-MAIL TEMPLATES (3)
+// E-MAIL TEMPLATES (4)
 // ============================================================
 export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
   {
@@ -60,14 +60,14 @@ Mit freundlichen Grüßen
   },
   {
     id: 'email_reminder',
-    label: 'E-Mail Termin-Erinnerung',
-    emoji: '⏰',
-    description: 'Ein Tag vor dem Termin',
+    label: 'E-Mail Erinnerung — 24h vorher',
+    emoji: '📅',
+    description: 'Tag vor dem Termin verschicken',
     condition: (lead) => lead.status === 'termin_gelegt' && !!lead.appointment_date,
-    defaultSubject: 'Erinnerung: Ihr Beratungstermin am {termin_kurzdatum}',
+    defaultSubject: 'Erinnerung: Ihr Beratungstermin morgen, {termin_kurzdatum}',
     defaultBody: `Sehr geehrte Frau {kunde_nachname},
 
-eine kurze, freundliche Erinnerung an Ihren bevorstehenden Beratungstermin:
+eine freundliche Erinnerung an Ihren morgigen Beratungstermin:
 
 ▸ Datum: {termin_datum}
 ▸ Uhrzeit: {termin_uhrzeit} Uhr
@@ -75,9 +75,33 @@ eine kurze, freundliche Erinnerung an Ihren bevorstehenden Beratungstermin:
 🔗 Ihr Microsoft Teams-Beratungsraum:
 {teams_link}
 
-Bitte klicken Sie wenige Minuten vor Termin-Beginn einfach auf den Link. Eine Installation ist nicht nötig – Sie können direkt im Browser teilnehmen.
+Bitte klicken Sie wenige Minuten vor Termin-Beginn auf den Link. Eine Installation ist nicht nötig – Sie können direkt im Browser teilnehmen.
 
 Sollten Sie wider Erwarten verhindert sein, melden Sie sich gerne kurz bei uns, damit wir einen neuen Termin finden können.
+
+Ich freue mich auf unser Gespräch morgen!
+
+Mit freundlichen Grüßen
+
+{signature}`,
+  },
+  {
+    id: 'email_reminder_3h',
+    label: 'E-Mail Erinnerung — 3h vorher',
+    emoji: '⏰',
+    description: 'Kurz vor dem Termin (heute)',
+    condition: (lead) => lead.status === 'termin_gelegt' && !!lead.appointment_date,
+    defaultSubject: 'Heute {termin_uhrzeit} Uhr — Ihr Beratungstermin',
+    defaultBody: `Sehr geehrte Frau {kunde_nachname},
+
+unser Beratungsgespräch beginnt heute in wenigen Stunden:
+
+▸ Heute, {termin_uhrzeit} Uhr
+
+🔗 Ihr Microsoft Teams-Beratungsraum:
+{teams_link}
+
+Bitte klicken Sie wenige Minuten vor Termin-Beginn auf den Link – Sie können direkt im Browser teilnehmen, keine Installation nötig.
 
 Ich freue mich auf unser Gespräch!
 
@@ -139,22 +163,43 @@ von Hebammen-Vorsorge`,
   },
   {
     id: 'wa_reminder',
-    label: 'WhatsApp Termin-Erinnerung',
-    emoji: '⏰',
-    description: 'Ein Tag oder einige Stunden vor dem Termin',
+    label: 'WhatsApp Erinnerung — 24h vorher',
+    emoji: '📅',
+    description: 'Tag vor dem Termin verschicken',
     condition: (lead) => lead.status === 'termin_gelegt' && !!lead.appointment_date,
     defaultText: `Hallo Frau {kunde_nachname} 😊
 
-kurze Erinnerung an unser Beratungsgespräch:
+freue mich, dass wir uns morgen sehen!
 
+📅 {termin_datum}
 ⏰ {termin_uhrzeit} Uhr
+
+🔗 Hier ist Ihr Teams-Link für morgen:
+{teams_link}
+
+Kurz vor Termin-Beginn einfach den Link antippen — direkt im Browser, keine Installation nötig.
+
+Falls Ihnen noch etwas dazwischen kommt, geben Sie mir gerne kurz Bescheid.
+
+Liebe Grüße
+{berater}`,
+  },
+  {
+    id: 'wa_reminder_3h',
+    label: 'WhatsApp Erinnerung — 3h vorher',
+    emoji: '⏰',
+    description: 'Kurz vor dem Termin (heute)',
+    condition: (lead) => lead.status === 'termin_gelegt' && !!lead.appointment_date,
+    defaultText: `Hallo Frau {kunde_nachname} 😊
+
+kurze Erinnerung — unser Termin ist heute in wenigen Stunden:
+
+⏰ Heute, {termin_uhrzeit} Uhr
 
 🔗 Hier ist nochmal Ihr Teams-Link:
 {teams_link}
 
-Einfach kurz vor Termin-Beginn antippen — direkt im Browser, keine Installation nötig.
-
-Falls etwas dazwischenkommt, sagen Sie mir gerne kurz Bescheid. Sonst bis gleich! 🌸
+Einfach kurz vor Termin-Beginn antippen — direkt im Browser. Bis gleich! 🌸
 
 Liebe Grüße
 {berater}`,
