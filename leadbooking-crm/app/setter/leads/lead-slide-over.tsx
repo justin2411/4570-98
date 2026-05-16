@@ -221,12 +221,14 @@ ${signature}`
     const dt = new Date(`${recallDate}T${recallTime || '10:00'}`).toISOString()
     const { data, error } = await supabase.from('leads').update({ status: 'wiedervorlage', recall_date: dt }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler: ' + error.message); setSavingRecall(false); return }
-    try {
-      await supabase.from('activity_log').insert({
-        lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: 'wiedervorlage',
-        note: `Wiedervorlage am ${new Date(dt).toLocaleString('de-DE')}`,
-      })
-    } catch (_) {}
+    const { error: actErr } = await supabase.from('activity_log').insert({
+      lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: 'wiedervorlage',
+      note: `Wiedervorlage am ${new Date(dt).toLocaleString('de-DE')}`,
+    })
+    if (actErr) {
+      console.error('[activity_log] Insert fehlgeschlagen:', actErr)
+      toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
+    }
     toast.success('Wiedervorlage geplant ⏰')
     onUpdate(data as Lead); setShowRecallDialog(false); setSavingRecall(false)
     advanceOrClose()
@@ -239,11 +241,13 @@ ${signature}`
     try {
       const { data, error } = await supabase.from('leads').update({ status }).eq('id', lead.id).select().single()
       if (error) { toast.error('Fehler: ' + error.message); setLoading(null); return }
-      try {
-        await supabase.from('activity_log').insert({
-          lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: status, note: null,
-        })
-      } catch (_) {}
+      const { error: actErr } = await supabase.from('activity_log').insert({
+        lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: status, note: null,
+      })
+      if (actErr) {
+        console.error('[activity_log] Insert fehlgeschlagen:', actErr)
+        toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
+      }
       toast.success('✓ ' + STATUS_CONFIG[status].label)
       onUpdate(data as Lead); advanceOrClose()
     } catch (_) { toast.error('Fehler'); setLoading(null) }

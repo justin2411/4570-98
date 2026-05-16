@@ -39,13 +39,17 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
       .update({ appointment_date: newDate })
       .eq('id', lead.id)
     if (error) { toast.error('Fehler: ' + error.message); setSaving(false); return }
-    await supabase.from('activity_log').insert({
+    const { error: actErr } = await supabase.from('activity_log').insert({
       lead_id: lead.id,
       setter_id: setter.id,
       old_status: 'termin_gelegt',
       new_status: 'termin_gelegt',
       note: `Termin verschoben auf ${new Date(newDate).toLocaleString('de-DE')}`,
     })
+    if (actErr) {
+      console.error('[activity_log] Insert fehlgeschlagen:', actErr)
+      toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
+    }
     toast.success('Termin verschoben ✓')
     onUpdate({ ...lead, appointment_date: newDate })
     setSaving(false)
@@ -66,13 +70,17 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
     }
     const { error } = await supabase.from('leads').update(updates).eq('id', lead.id)
     if (error) { toast.error('Fehler: ' + error.message); setSaving(false); return }
-    await supabase.from('activity_log').insert({
+    const { error: actErr } = await supabase.from('activity_log').insert({
       lead_id: lead.id,
       setter_id: setter.id,
       old_status: 'termin_gelegt',
       new_status: newStatus,
       note: note || 'Termin abgesagt',
     })
+    if (actErr) {
+      console.error('[activity_log] Insert fehlgeschlagen:', actErr)
+      toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
+    }
     toast.success('Termin entfernt')
     if (onDelete) onDelete()
     setSaving(false)
