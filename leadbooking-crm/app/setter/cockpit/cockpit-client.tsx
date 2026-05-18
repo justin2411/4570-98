@@ -4,7 +4,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
-import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun } from 'lucide-react'
+import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search } from 'lucide-react'
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
 import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
@@ -19,6 +19,39 @@ interface Props {
 type DrawerView = 'closed' | 'script' | 'objections' | 'notes'
 type ActionType = 'termin' | 'wiedervorlage' | 'kein_interesse' | 'termin_done' | null
 
+// ───────────────────────────────────────────────────────────────
+// Helpers für die Suche
+// ───────────────────────────────────────────────────────────────
+function normalizePhone(phone: string): string {
+  return (phone || '').replace(/\D/g, '')
+}
+
+function statusBadgeClass(status: string): string {
+  switch (status) {
+    case 'neu': return 'bg-blue-100 text-blue-700'
+    case 'angerufen': return 'bg-yellow-100 text-yellow-700'
+    case 'nicht_erreicht': return 'bg-orange-100 text-orange-700'
+    case 'wiedervorlage': return 'bg-purple-100 text-purple-700'
+    case 'termin_gelegt': return 'bg-green-100 text-green-700'
+    case 'termin_stattgefunden': return 'bg-emerald-100 text-emerald-700'
+    case 'kein_interesse': return 'bg-red-100 text-red-700'
+    default: return 'bg-gray-100 text-gray-700'
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'neu': return 'Neu'
+    case 'angerufen': return 'Angerufen'
+    case 'nicht_erreicht': return 'Nicht err.'
+    case 'wiedervorlage': return 'Wiederv.'
+    case 'termin_gelegt': return 'Termin'
+    case 'termin_stattgefunden': return 'Termin OK'
+    case 'kein_interesse': return 'Kein Int.'
+    default: return status
+  }
+}
+
 export function CockpitClient({ initialDeck, setter }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -31,6 +64,13 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   const [todayDone, setTodayDone] = useState(0)
   const [streak, setStreak] = useState(0)
   const [dark, setDark] = useState(false)
+
+  // ─── Search state ─────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Lead[]>([])
+  const [searching, setSearching] = useState(false)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Dark mode aus localStorage laden
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -80,6 +120,98 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         setStreak(calculateStreak(dates))
       })
   }, [setter.id, supabase])
+
+  // ─── Live-Suche (Debounced) ───────────────────────────────────
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (query.length < 2) {
+      setSearchResults([])
+      setSearching(false)
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+      return
+    }
+
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    setSearching(true)
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      const queryLower = query.toLowerCase()
+      const queryDigits = normalizePhone(query)
+
+      // 1) Lokal im Deck suchen — instant Treffer
+      const localResults = deck.filter(lead => {
+        const nameMatch = lead.name?.toLowerCase().includes(queryLower)
+        const phoneMatch =
+          queryDigits.length >= 3 &&
+          normalizePhone(lead.phone || '').includes(queryDigits)
+        return nameMatch || phoneMatch
+      })
+
+      // 2) In Supabase suchen (RLS sorgt automatisch dafür, dass nur
+      //    eigene Leads zurückkommen — bzw. alle bei Admin-Rolle)
+      const orClauses: string[] = [`name.ilike.%${query}%`]
+      if (queryDigits.length >= 3) {
+        orClauses.push(`phone.ilike.%${queryDigits}%`)
+      }
+      // Fallback: User tippt mit Formatierung (z.B. "+49 151")
+      if (query !== queryDigits) {
+        orClauses.push(`phone.ilike.%${query}%`)
+      }
+
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .or(orClauses.join(','))
+        .limit(10)
+
+      if (error) {
+        console.error('[search] Fehler:', error)
+      }
+
+      // Lokale Treffer zuerst (sind schon im Deck), dann unbekannte DB-Treffer
+      const localIds = new Set(localResults.map(l => l.id))
+      const dbExtra = ((data as any[]) || []).filter(
+        (l: any) => !localIds.has(l.id),
+      ) as Lead[]
+
+      setSearchResults([...localResults, ...dbExtra])
+      setSearching(false)
+    }, 250)
+
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    }
+  }, [searchQuery, deck, supabase])
+
+  // Treffer auswählen → Karte vorne (an currentIdx) einfügen / dorthin verschieben
+  function selectSearchResult(lead: Lead) {
+    const existingIdx = deck.findIndex(l => l.id === lead.id)
+
+    if (existingIdx === currentIdx) {
+      // Schon sichtbar — nichts zu tun
+    } else if (existingIdx !== -1) {
+      // Schon im Deck, an aktuelle Position verschieben
+      const newDeck = [...deck]
+      const [moved] = newDeck.splice(existingIdx, 1)
+      const insertAt = existingIdx < currentIdx ? currentIdx - 1 : currentIdx
+      newDeck.splice(insertAt, 0, moved)
+      setDeck(newDeck)
+      setCurrentIdx(insertAt)
+    } else {
+      // Neuer Lead aus der DB — vor currentIdx einfügen
+      const newDeck = [...deck]
+      newDeck.splice(currentIdx, 0, lead)
+      setDeck(newDeck)
+      // currentIdx zeigt jetzt automatisch auf den neuen Lead
+    }
+
+    // Suche zurücksetzen + Drawer schließen falls offen
+    setSearchQuery('')
+    setSearchResults([])
+    setDrawer('closed')
+    setDragOffset({ x: 0, y: 0 })
+    toast.success(`→ ${lead.name}`)
+  }
 
   function advanceCard() {
     setDragOffset({ x: 0, y: 0 })
@@ -235,6 +367,84 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         >
           {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
         </button>
+      </div>
+
+      {/* ─── Such-Leiste ─────────────────────────────────────── */}
+      <div className="px-4 pb-2 relative z-30">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Name oder Telefonnummer suchen…"
+            className={
+              "w-full pl-10 pr-9 py-2 rounded-lg text-sm text-white placeholder:text-white/50 " +
+              "border border-white/20 focus:border-white/40 focus:outline-none transition-colors " +
+              (dark ? "bg-white/5" : "bg-white/10")
+            }
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => { setSearchQuery(''); setSearchResults([]) }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-white/60 hover:text-white"
+              aria-label="Suche löschen"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Dropdown mit Treffern */}
+        {searchQuery.trim().length >= 2 && (
+          <div className="absolute left-4 right-4 top-full mt-1 bg-white rounded-xl shadow-2xl max-h-80 overflow-y-auto border border-gray-200">
+            {searching && (
+              <div className="px-3 py-3 text-xs text-gray-500 text-center">
+                Suche läuft…
+              </div>
+            )}
+            {!searching && searchResults.length === 0 && (
+              <div className="px-3 py-3 text-xs text-gray-500 text-center">
+                Keine Treffer für „{searchQuery.trim()}"
+              </div>
+            )}
+            {!searching && searchResults.map(lead => {
+              const isInDeck = deck.some(l => l.id === lead.id)
+              return (
+                <button
+                  key={lead.id}
+                  onClick={() => selectSearchResult(lead)}
+                  className="w-full text-left px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-[#1E3A5F] truncate">
+                        {lead.name}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {lead.phone}
+                        {lead.state ? <span className="text-gray-400"> · {lead.state}</span> : null}
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-0.5">
+                      <span className={
+                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium " +
+                        statusBadgeClass(lead.status)
+                      }>
+                        {statusLabel(lead.status)}
+                      </span>
+                      {isInDeck && (
+                        <span className="text-[9px] text-gray-400">im Deck</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Streak + Daily-Goal Banner */}
