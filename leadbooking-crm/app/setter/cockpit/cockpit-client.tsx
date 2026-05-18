@@ -94,13 +94,17 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   }
 
   async function logActivity(leadId: string, newStatus: string, note?: string) {
-    await supabase.from('activity_log').insert({
+    const { error } = await supabase.from('activity_log').insert({
       lead_id: leadId,
       setter_id: setter.id,
       old_status: currentLead?.status || '',
       new_status: newStatus,
       note: note || null,
     })
+    if (error) {
+      console.error('[activity_log] Insert fehlgeschlagen:', error)
+      toast.error('⚠️ Aktivität nicht getrackt: ' + error.message)
+    }
   }
 
   // Action handlers (called from swipe or buttons)
