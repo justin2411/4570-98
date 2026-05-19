@@ -254,21 +254,35 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     // Nicht erreicht → auto +2h Wiedervorlage
     if (!currentLead || savingAction) return
     setSavingAction(true)
-    const recall = new Date(Date.now() + 2 * 60 * 60 * 1000)
+    const attempts = (currentLead.call_attempts || 0) + 1
+    let recall: Date
+    let recallLabel: string
+    if (attempts === 1) {
+      recall = new Date(Date.now() + 2 * 60 * 60 * 1000)
+      recallLabel = "🔁 Wiedervorlage in 2h"
+    } else if (attempts === 2) {
+      recall = new Date(Date.now() + 4 * 60 * 60 * 1000)
+      recallLabel = "🔁 Wiedervorlage in 4h"
+    } else {
+      recall = new Date()
+      recall.setDate(recall.getDate() + 1)
+      recall.setHours(10, 0, 0, 0)
+      recallLabel = `🔁 ${attempts}. Versuch — morgen 10 Uhr`
+    }
     const { error } = await supabase
       .from('leads')
       .update({
         status: 'nicht_erreicht',
         recall_date: recall.toISOString(),
-        call_attempts: (currentLead.call_attempts || 0) + 1,
+        call_attempts: attempts,
         last_call_attempt: new Date().toISOString(),
       })
       .eq('id', currentLead.id)
     if (error) {
       toast.error('Fehler: ' + error.message)
     } else {
-      await logActivity(currentLead.id, 'nicht_erreicht', 'Nicht erreicht — Wiedervorlage in 2h')
-      toast.success('🔁 Wiedervorlage in 2h')
+      await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch) — ${recallLabel}`)
+      toast.success(recallLabel)
       advanceCard()
     }
     setSavingAction(false)
@@ -534,7 +548,7 @@ export function CockpitClient({ initialDeck, setter }: Props) {
               supabase
                 .from('leads')
                 .update({
-                  call_attempts: (currentLead.call_attempts || 0) + 1,
+                  call_attempts: attempts,
                   last_call_attempt: new Date().toISOString(),
                 })
                 .eq('id', currentLead.id)
@@ -648,7 +662,7 @@ export function CockpitClient({ initialDeck, setter }: Props) {
               .update({
                 status: 'wiedervorlage',
                 recall_date: date,
-                call_attempts: (currentLead.call_attempts || 0) + 1,
+                call_attempts: attempts,
                 last_call_attempt: new Date().toISOString(),
               })
               .eq('id', currentLead.id)

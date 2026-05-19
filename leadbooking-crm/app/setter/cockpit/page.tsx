@@ -25,10 +25,16 @@ export default async function CockpitPage() {
     )
   }
 
-  // Smart-Deck: Wiedervorlagen fällig → nicht_erreicht → neu/angerufen
-  // Limit 100 für die initial-Ladung
+  // ───────────────────────────────────────────────────────────────
+  // Smart-Deck Reihenfolge:
+  //   1) Fällige Wiedervorlagen (explizite Zusagen — immer zuerst)
+  //   2) Neue/angerufene Leads (frischeste Erfolgschance)
+  //   3) Nicht erreicht — NUR wenn recall_date abgelaufen ist
+  //      (mit wenigsten Versuchen zuerst — "tote" Leads landen hinten)
+  // ───────────────────────────────────────────────────────────────
   const now = new Date().toISOString()
 
+  // 1) Fällige Wiedervorlagen
   const { data: wiedervorlagen } = await supabase
     .from('leads')
     .select('*')
@@ -38,27 +44,33 @@ export default async function CockpitPage() {
     .order('recall_date', { ascending: true })
     .limit(100)
 
-  const { data: nichtErreicht } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('assigned_to', user.id)
-    .eq('status', 'nicht_erreicht')
-    .order('last_call_attempt', { ascending: true, nullsFirst: true })
-    .limit(100)
-
+  // 2) Frische Leads (neu + angerufen) — hochwertige zuerst,
+  //    bei Gleichstand: wenig Versuche zuerst
   const { data: neueLeads } = await supabase
     .from('leads')
     .select('*')
     .eq('assigned_to', user.id)
     .in('status', ['neu', 'angerufen'])
     .order('score', { ascending: false })
+    .order('call_attempts', { ascending: true, nullsFirst: true })
     .limit(100)
 
-  // Zusammen-Deck: Wiedervorlagen zuerst, dann nicht_erreicht, dann neu
-  // Dedupliziert per ID (sollte eh keine Dopplungen geben)
+  // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen ist
+  //    Sortiert nach: wenig Versuche zuerst, dann älteste zuletzt versucht
+  const { data: nichtErreicht } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('assigned_to', user.id)
+    .eq('status', 'nicht_erreicht')
+    .or(`recall_date.is.null,recall_date.lte.${now}`)
+    .order('call_attempts', { ascending: true, nullsFirst: true })
+    .order('last_call_attempt', { ascending: true, nullsFirst: true })
+    .limit(100)
+
+  // Zusammen-Deck: Wiedervorlagen → neue Leads → nicht_erreicht (hinten!)
   const seen = new Set<string>()
   const deck: Lead[] = []
-  for (const list of [wiedervorlagen, nichtErreicht, neueLeads]) {
+  for (const list of [wiedervorlagen, neueLeads, nichtErreicht]) {
     for (const lead of list || []) {
       if (!seen.has(lead.id)) {
         seen.add(lead.id)
