@@ -4,7 +4,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
-import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search } from 'lucide-react'
+import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search, Pencil } from 'lucide-react'
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
 import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
@@ -20,10 +20,22 @@ type DrawerView = 'closed' | 'script' | 'objections' | 'notes'
 type ActionType = 'termin' | 'wiedervorlage' | 'kein_interesse' | 'termin_done' | null
 
 // ───────────────────────────────────────────────────────────────
-// Helpers für die Suche
+// Helpers
 // ───────────────────────────────────────────────────────────────
 function normalizePhone(phone: string): string {
   return (phone || '').replace(/\D/g, '')
+}
+
+// Stellt sicher, dass die Nummer mit + beginnt — für tel:-Links & Anzeige
+function formatPhoneForCall(phone: string): string {
+  if (!phone) return ''
+  const cleaned = phone.replace(/[^\d+]/g, '')
+  if (!cleaned) return ''
+  if (cleaned.startsWith('+')) return cleaned
+  if (cleaned.startsWith('00')) return '+' + cleaned.slice(2)
+  if (cleaned.startsWith('0')) return '+49' + cleaned.slice(1)
+  // 49xxx → +49xxx, oder beliebige andere Ziffern → einfach + davor
+  return '+' + cleaned
 }
 
 function statusBadgeClass(status: string): string {
@@ -65,13 +77,15 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   const [streak, setStreak] = useState(0)
   const [dark, setDark] = useState(false)
 
-  // ─── Search state ─────────────────────────────────────────────
+  // Search state
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Lead[]>([])
   const [searching, setSearching] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Dark mode aus localStorage laden
+  // Edit-Phone Modal
+  const [editPhoneOpen, setEditPhoneOpen] = useState(false)
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setDark(window.localStorage.getItem('cockpit-dark') === '1')
@@ -87,7 +101,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     })
   }
 
-  // Swipe state
   const cardRef = useRef<HTMLDivElement>(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
@@ -95,7 +108,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
 
   const currentLead = deck[currentIdx]
 
-  // Lade heutige erledigte (für Daily-Goal)
   useEffect(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -107,7 +119,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
       .gte('created_at', today.toISOString())
       .then(({ count }) => setTodayDone(count || 0))
 
-    // Streak: hole alle 'termin_gelegt' Dates der letzten 30 Tage
     const since = new Date(Date.now() - 30 * 86400000).toISOString()
     supabase
       .from('activity_log')
@@ -121,7 +132,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
       })
   }, [setter.id, supabase])
 
-  // ─── Live-Suche (Debounced) ───────────────────────────────────
   useEffect(() => {
     const query = searchQuery.trim()
     if (query.length < 2) {
@@ -138,7 +148,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
       const queryLower = query.toLowerCase()
       const queryDigits = normalizePhone(query)
 
-      // 1) Lokal im Deck suchen — instant Treffer
       const localResults = deck.filter(lead => {
         const nameMatch = lead.name?.toLowerCase().includes(queryLower)
         const phoneMatch =
@@ -147,13 +156,10 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         return nameMatch || phoneMatch
       })
 
-      // 2) In Supabase suchen (RLS sorgt automatisch dafür, dass nur
-      //    eigene Leads zurückkommen — bzw. alle bei Admin-Rolle)
       const orClauses: string[] = [`name.ilike.%${query}%`]
       if (queryDigits.length >= 3) {
         orClauses.push(`phone.ilike.%${queryDigits}%`)
       }
-      // Fallback: User tippt mit Formatierung (z.B. "+49 151")
       if (query !== queryDigits) {
         orClauses.push(`phone.ilike.%${query}%`)
       }
@@ -168,7 +174,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         console.error('[search] Fehler:', error)
       }
 
-      // Lokale Treffer zuerst (sind schon im Deck), dann unbekannte DB-Treffer
       const localIds = new Set(localResults.map(l => l.id))
       const dbExtra = ((data as any[]) || []).filter(
         (l: any) => !localIds.has(l.id),
@@ -183,14 +188,12 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     }
   }, [searchQuery, deck, supabase])
 
-  // Treffer auswählen → Karte vorne (an currentIdx) einfügen / dorthin verschieben
   function selectSearchResult(lead: Lead) {
     const existingIdx = deck.findIndex(l => l.id === lead.id)
 
     if (existingIdx === currentIdx) {
-      // Schon sichtbar — nichts zu tun
+      // schon sichtbar
     } else if (existingIdx !== -1) {
-      // Schon im Deck, an aktuelle Position verschieben
       const newDeck = [...deck]
       const [moved] = newDeck.splice(existingIdx, 1)
       const insertAt = existingIdx < currentIdx ? currentIdx - 1 : currentIdx
@@ -198,14 +201,11 @@ export function CockpitClient({ initialDeck, setter }: Props) {
       setDeck(newDeck)
       setCurrentIdx(insertAt)
     } else {
-      // Neuer Lead aus der DB — vor currentIdx einfügen
       const newDeck = [...deck]
       newDeck.splice(currentIdx, 0, lead)
       setDeck(newDeck)
-      // currentIdx zeigt jetzt automatisch auf den neuen Lead
     }
 
-    // Suche zurücksetzen + Drawer schließen falls offen
     setSearchQuery('')
     setSearchResults([])
     setDrawer('closed')
@@ -239,36 +239,35 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     }
   }
 
-  // Action handlers (called from swipe or buttons)
   async function handleSwipeUp() {
-    // Termin gelegt → Modal
     setActionModal('termin')
   }
 
   async function handleSwipeDown() {
-    // Wiedervorlage → Modal
     setActionModal('wiedervorlage')
   }
 
+  // Nicht erreicht — eskalierende Wartezeit je nach Anzahl Versuche
   async function handleSwipeRight() {
-    // Nicht erreicht → auto +2h Wiedervorlage
     if (!currentLead || savingAction) return
     setSavingAction(true)
+
     const attempts = (currentLead.call_attempts || 0) + 1
     let recall: Date
     let recallLabel: string
     if (attempts === 1) {
       recall = new Date(Date.now() + 2 * 60 * 60 * 1000)
-      recallLabel = "🔁 Wiedervorlage in 2h"
+      recallLabel = '🔁 Wiedervorlage in 2h'
     } else if (attempts === 2) {
       recall = new Date(Date.now() + 4 * 60 * 60 * 1000)
-      recallLabel = "🔁 Wiedervorlage in 4h"
+      recallLabel = '🔁 Wiedervorlage in 4h'
     } else {
       recall = new Date()
       recall.setDate(recall.getDate() + 1)
       recall.setHours(10, 0, 0, 0)
       recallLabel = `🔁 ${attempts}. Versuch — morgen 10 Uhr`
     }
+
     const { error } = await supabase
       .from('leads')
       .update({
@@ -289,7 +288,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   }
 
   async function handleSwipeLeft() {
-    // Kein Interesse → direkt speichern (kein Modal für jetzt)
     if (!currentLead || savingAction) return
     setSavingAction(true)
     const { error } = await supabase
@@ -306,7 +304,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     setSavingAction(false)
   }
 
-  // Touch / mouse handlers
   function onPointerDown(e: React.PointerEvent) {
     if (savingAction || actionModal) return
     startPos.current = { x: e.clientX, y: e.clientY }
@@ -328,7 +325,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     const absX = Math.abs(x)
     const absY = Math.abs(y)
 
-    // Dominanteste Richtung wählen
     if (absX > threshold && absX > absY) {
       if (x > 0) handleSwipeRight()
       else handleSwipeLeft()
@@ -336,13 +332,11 @@ export function CockpitClient({ initialDeck, setter }: Props) {
       if (y < 0) handleSwipeUp()
       else handleSwipeDown()
     } else {
-      // Zurück zur Mitte
       setDragOffset({ x: 0, y: 0 })
     }
     setDragging(false)
   }
 
-  // Empty deck
   if (!currentLead) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]">
@@ -359,9 +353,10 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     )
   }
 
+  const formattedPhone = formatPhoneForCall(currentLead.phone)
+
   return (
     <div className={"min-h-screen transition-colors " + (dark ? "bg-gradient-to-br from-gray-900 to-slate-800" : "bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]")} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 text-white">
         <button
           onClick={() => router.push('/setter')}
@@ -383,7 +378,7 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         </button>
       </div>
 
-      {/* ─── Such-Leiste ─────────────────────────────────────── */}
+      {/* Such-Leiste */}
       <div className="px-4 pb-2 relative z-30">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
@@ -411,7 +406,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
           )}
         </div>
 
-        {/* Dropdown mit Treffern */}
         {searchQuery.trim().length >= 2 && (
           <div className="absolute left-4 right-4 top-full mt-1 bg-white rounded-xl shadow-2xl max-h-80 overflow-y-auto border border-gray-200">
             {searching && (
@@ -438,7 +432,7 @@ export function CockpitClient({ initialDeck, setter }: Props) {
                         {lead.name}
                       </div>
                       <div className="text-xs text-gray-500 truncate">
-                        {lead.phone}
+                        {formatPhoneForCall(lead.phone)}
                         {lead.state ? <span className="text-gray-400"> · {lead.state}</span> : null}
                       </div>
                     </div>
@@ -461,7 +455,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         )}
       </div>
 
-      {/* Streak + Daily-Goal Banner */}
       <div className="px-4 pb-2">
         <div className={"flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-white text-xs " + (dark ? "bg-white/5" : "bg-white/10")}>
           <div className="flex items-center gap-1.5">
@@ -483,7 +476,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         </div>
       </div>
 
-      {/* Deck-Progress */}
       <div className="h-1 bg-white/10 mx-4 rounded-full overflow-hidden">
         <div
           className="h-full bg-yellow-400 transition-all"
@@ -491,7 +483,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         />
       </div>
 
-      {/* Lead-Karte mit Swipe */}
       <div className="p-4 pt-6">
         <div
           ref={cardRef}
@@ -508,7 +499,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         >
           <SwipeHints offset={dragOffset} />
 
-          {/* Call-Attempt Badge oben */}
           {(currentLead.call_attempts || 0) > 0 && (
             <div className="flex justify-center mb-3">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-medium">
@@ -540,15 +530,18 @@ export function CockpitClient({ initialDeck, setter }: Props) {
             </div>
           </div>
 
-          {/* Big Phone Button */}
+          {/* Big Phone Button — mit + im Anruf-Link */}
           <a
-            href={`tel:${currentLead.phone}`}
-            onClick={() => {
-              // Call attempts hochzählen (fire-and-forget)
+            href={`tel:${formattedPhone}`}
+            onClick={(e) => {
+              if (!formattedPhone) {
+                e.preventDefault()
+                return
+              }
               supabase
                 .from('leads')
                 .update({
-                  call_attempts: attempts,
+                  call_attempts: (currentLead.call_attempts || 0) + 1,
                   last_call_attempt: new Date().toISOString(),
                 })
                 .eq('id', currentLead.id)
@@ -557,17 +550,28 @@ export function CockpitClient({ initialDeck, setter }: Props) {
             className="mt-6 flex items-center justify-center gap-3 w-full py-4 rounded-xl bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold text-lg shadow-lg"
           >
             <Phone className="w-6 h-6" />
-            {currentLead.phone}
+            {formattedPhone || 'Keine Nummer'}
           </a>
 
-          {/* Notes preview */}
+          {/* Telefonnummer ändern */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditPhoneOpen(true)
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="mt-2 w-full py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Pencil className="w-3 h-3" />
+            Telefonnummer ändern
+          </button>
+
           {currentLead.notes && (
-            <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200 text-xs text-gray-700 max-h-20 overflow-y-auto whitespace-pre-wrap">
+            <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200 text-xs text-gray-700 max-h-20 overflow-y-auto whitespace-pre-wrap">
               {currentLead.notes}
             </div>
           )}
 
-          {/* Drawer triggers */}
           <div className="mt-4 grid grid-cols-3 gap-2">
             <DrawerButton icon={BookOpen} label="Skript" onClick={() => setDrawer('script')} />
             <DrawerButton icon={MessageCircle} label="Einwände" onClick={() => setDrawer('objections')} />
@@ -576,7 +580,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         </div>
       </div>
 
-      {/* Action Buttons (für die die nicht swipen wollen) */}
       <div className="px-4 mt-2 grid grid-cols-4 gap-2">
         <ActionButton color="red" icon={ChevronLeft} label="Kein Int." onClick={handleSwipeLeft} disabled={savingAction} />
         <ActionButton color="purple" icon={ChevronDown} label="Wiederv." onClick={handleSwipeDown} disabled={savingAction} />
@@ -588,7 +591,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         💡 Tipp: Karte ziehen ←/↑/→/↓ — oder Buttons benutzen
       </div>
 
-      {/* Drawer */}
       {drawer !== 'closed' && (
         <Drawer
           view={drawer}
@@ -597,13 +599,33 @@ export function CockpitClient({ initialDeck, setter }: Props) {
           onClose={() => setDrawer('closed')}
           supabase={supabase}
           onNotesUpdate={(notes) => {
-            // Update lokal
             setDeck(d => d.map((l, i) => i === currentIdx ? { ...l, notes } : l))
           }}
         />
       )}
 
-      {/* Termin Modal */}
+      {/* Edit-Phone Modal */}
+      {editPhoneOpen && (
+        <EditPhoneModal
+          lead={currentLead}
+          onClose={() => setEditPhoneOpen(false)}
+          onSave={async (newPhone) => {
+            const { error } = await supabase
+              .from('leads')
+              .update({ phone: newPhone })
+              .eq('id', currentLead.id)
+            if (error) {
+              toast.error('Fehler: ' + error.message)
+              return
+            }
+            await logActivity(currentLead.id, currentLead.status, `Telefonnummer geändert auf ${newPhone}`)
+            setDeck(d => d.map((l, i) => i === currentIdx ? { ...l, phone: newPhone } : l))
+            toast.success('✓ Telefonnummer aktualisiert')
+            setEditPhoneOpen(false)
+          }}
+        />
+      )}
+
       {actionModal === 'termin' && (
         <TerminModal
           lead={currentLead}
@@ -621,26 +643,21 @@ export function CockpitClient({ initialDeck, setter }: Props) {
             if (error) { toast.error('Fehler: ' + error.message); return }
             await logActivity(currentLead.id, 'termin_gelegt', `Termin am ${new Date(date).toLocaleString('de-DE')}`)
             toast.success('🟡 Termin gelegt!')
-            // Erfolgs-Sound (nur wenn aktiviert)
             if (setter.sound_enabled !== false) {
               playSuccessSound()
             }
-            // Heute-Counter und Streak aktualisieren
             setTodayDone(n => n + 1)
-            // Aktualisiere Lead lokal mit appointment_date + teams_link
             setDeck(d => d.map((l, i) => i === currentIdx ? {
               ...l,
               status: 'termin_gelegt' as const,
               appointment_date: date,
               teams_link: teamsLink || null,
             } : l))
-            // Wechsle zu Post-Termin-Modal (Mail + WhatsApp anbieten)
             setActionModal('termin_done')
           }}
         />
       )}
 
-      {/* Post-Termin Modal: Mail + WhatsApp + Weiter */}
       {actionModal === 'termin_done' && (
         <PostTerminModal
           lead={currentLead}
@@ -652,7 +669,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         />
       )}
 
-      {/* Wiedervorlage Modal */}
       {actionModal === 'wiedervorlage' && (
         <WiedervorlageModal
           onClose={() => setActionModal(null)}
@@ -662,7 +678,7 @@ export function CockpitClient({ initialDeck, setter }: Props) {
               .update({
                 status: 'wiedervorlage',
                 recall_date: date,
-                call_attempts: attempts,
+                call_attempts: (currentLead.call_attempts || 0) + 1,
                 last_call_attempt: new Date().toISOString(),
               })
               .eq('id', currentLead.id)
@@ -741,6 +757,73 @@ function ActionButton({ color, icon: Icon, label, onClick, disabled }: { color: 
   )
 }
 
+// ============== EDIT PHONE MODAL ==============
+
+function EditPhoneModal({ lead, onClose, onSave }: {
+  lead: Lead
+  onClose: () => void
+  onSave: (phone: string) => void | Promise<void>
+}) {
+  const [phone, setPhone] = useState(lead.phone || '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    const trimmed = phone.trim()
+    if (!trimmed) return
+    setSaving(true)
+    try {
+      await onSave(trimmed)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const previewPhone = formatPhoneForCall(phone)
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-[#1E3A5F]">📞 Telefonnummer ändern</h2>
+          <button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Für <strong>{lead.name}</strong>
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Neue Telefonnummer</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="+49 151 12345678"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
+            autoFocus
+          />
+          {previewPhone && previewPhone !== phone.trim() && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Anruf läuft auf: <span className="font-mono text-[#2E75B6]">{previewPhone}</span>
+            </p>
+          )}
+          <p className="mt-2 text-xs text-gray-500">
+            💡 Mit „+" am Anfang funktionieren Anrufe und WhatsApp am zuverlässigsten.
+          </p>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">Abbrechen</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !phone.trim()}
+            className="flex-1 py-2.5 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white font-semibold disabled:opacity-50"
+          >
+            {saving ? 'Speichern…' : '✓ Speichern'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ============== DRAWER ==============
 
 function Drawer({ view, lead, setter, onClose, supabase, onNotesUpdate }: {
@@ -751,9 +834,7 @@ function Drawer({ view, lead, setter, onClose, supabase, onNotesUpdate }: {
   supabase: any
   onNotesUpdate: (notes: string) => void
 }) {
-  // Active tab innerhalb des Drawers (initial = view aus Parent)
   const [tab, setTab] = useState<Exclude<DrawerView, 'closed'>>(view === 'closed' ? 'script' : view)
-  // Wenn Einwand aus Skript-Quickbar getappt wird, springen wir mit highlight
   const [jumpToObjection, setJumpToObjection] = useState<string | null>(null)
 
   function quickJumpObjection(id: string) {
@@ -768,7 +849,6 @@ function Drawer({ view, lead, setter, onClose, supabase, onNotesUpdate }: {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header mit Tabs + Close */}
         <div className="border-b border-gray-200 px-2 pt-2 flex items-center gap-1">
           <TabButton active={tab === 'script'} onClick={() => setTab('script')} icon="📖" label="Skript" />
           <TabButton active={tab === 'objections'} onClick={() => setTab('objections')} icon="🛡" label="Einwände" />
@@ -782,14 +862,12 @@ function Drawer({ view, lead, setter, onClose, supabase, onNotesUpdate }: {
           </button>
         </div>
 
-        {/* Scrollbarer Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {tab === 'script' && <ScriptView lead={lead} setter={setter} />}
           {tab === 'objections' && <ObjectionsView lead={lead} setter={setter} jumpToId={jumpToObjection} onJumped={() => setJumpToObjection(null)} />}
           {tab === 'notes' && <NotesView lead={lead} setter={setter} supabase={supabase} onNotesUpdate={onNotesUpdate} />}
         </div>
 
-        {/* Sticky Einwand-Quickbar — NUR auf Skript-Tab */}
         {tab === 'script' && (
           <div className="border-t border-gray-200 bg-gradient-to-r from-red-50 to-orange-50 px-2 py-2">
             <div className="text-[10px] font-semibold text-gray-600 px-1 mb-1.5 uppercase tracking-wide">
@@ -831,7 +909,6 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
 }
 
 function ScriptView({ lead, setter }: { lead: Lead; setter: Profile }) {
-  // Alle Sections per Default OFFEN. closedIds-Set speichert zugeklappte.
   const [closedIds, setClosedIds] = useState<Set<string>>(new Set())
 
   function toggle(id: string) {
@@ -867,11 +944,9 @@ function ObjectionsView({ lead, setter, jumpToId, onJumped }: {
   const [openId, setOpenId] = useState<string | null>(null)
   const refs = useRef<Record<string, HTMLDivElement | null>>({})
 
-  // Wenn von außen ein Einwand gefordert wird (Quickbar im Skript), öffne ihn + scrolle hin
   useEffect(() => {
     if (jumpToId) {
       setOpenId(jumpToId)
-      // Kurz warten bis DOM gerendert, dann scrollen
       setTimeout(() => {
         const el = refs.current[jumpToId]
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1086,7 +1161,6 @@ function TerminModal({ lead, setter, onClose, onDone }: {
 }
 
 function WiedervorlageModal({ onClose, onDone }: { onClose: () => void; onDone: (date: string) => void }) {
-  // Quick-Options
   const quickOptions = [
     { label: 'In 2h', hours: 2 },
     { label: 'Heute Abend', hours: 0, time: 'evening' as const },
@@ -1180,12 +1254,10 @@ function PostTerminModal({ lead, setter, onContinue }: {
   const [mailSent, setMailSent] = useState(false)
   const [waSent, setWaSent] = useState(false)
 
-  // Termin-Datum schön formatiert
   const dateObj = lead.appointment_date ? new Date(lead.appointment_date) : null
   const formattedDate = dateObj?.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) || ''
   const formattedTime = dateObj?.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) || ''
 
-  // WhatsApp-Templates (custom oder default)
   const applicableTpls = applicableWhatsappTemplates(lead)
   const confirmTpl = applicableTpls.find(t => t.id === 'wa_confirmation') || applicableTpls[0]
 
@@ -1212,14 +1284,12 @@ function PostTerminModal({ lead, setter, onContinue }: {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 overflow-y-auto">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden my-4">
-        {/* Header — Erfolg */}
         <div className="bg-gradient-to-br from-green-500 to-green-600 px-5 py-5 text-white text-center">
           <div className="text-4xl mb-1">🎉</div>
           <h2 className="text-lg font-bold">Termin gespeichert!</h2>
           <p className="text-sm text-white/90 mt-0.5">{lead.name}</p>
         </div>
 
-        {/* Termin-Details als schöne Karte */}
         <div className="px-5 pt-4">
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
             <div className="flex items-center gap-3 text-sm">
@@ -1237,7 +1307,6 @@ function PostTerminModal({ lead, setter, onContinue }: {
           </div>
         </div>
 
-        {/* Closer benachrichtigen */}
         <div className="px-5 pt-5">
           <CloserNotify
             lead={lead}
@@ -1246,14 +1315,12 @@ function PostTerminModal({ lead, setter, onContinue }: {
           />
         </div>
 
-        {/* Bestätigung senden */}
         <div className="px-5 pt-5 pb-4">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
             📬 Bestätigung jetzt senden
           </h3>
 
           <div className="space-y-2">
-            {/* Mail Button */}
             <button
               onClick={openMail}
               disabled={!lead.email}
@@ -1281,7 +1348,6 @@ function PostTerminModal({ lead, setter, onContinue }: {
               </div>
             </button>
 
-            {/* WhatsApp Button */}
             <button
               onClick={openWhatsapp}
               disabled={!confirmTpl}
@@ -1300,7 +1366,7 @@ function PostTerminModal({ lead, setter, onContinue }: {
                     {waSent ? 'WhatsApp gesendet' : 'WhatsApp-Bestätigung'}
                   </div>
                   <div className="text-xs text-gray-500 truncate">
-                    {lead.phone || 'Keine Telefonnummer'}
+                    {formatPhoneForCall(lead.phone) || 'Keine Telefonnummer'}
                   </div>
                 </div>
                 {!waSent && confirmTpl && (
@@ -1317,7 +1383,6 @@ function PostTerminModal({ lead, setter, onContinue }: {
           )}
         </div>
 
-        {/* Continue Button */}
         <div className="px-5 pb-5 border-t border-gray-100 pt-4">
           <button
             onClick={onContinue}
