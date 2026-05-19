@@ -4,7 +4,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
-import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search, Pencil } from 'lucide-react'
+import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search, Pencil, Plus } from 'lucide-react'
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { SCRIPT_SECTIONS, OBJECTIONS, renderTemplate } from '@/lib/script-template'
 import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
@@ -26,7 +26,6 @@ function normalizePhone(phone: string): string {
   return (phone || '').replace(/\D/g, '')
 }
 
-// Stellt sicher, dass die Nummer mit + beginnt — für tel:-Links & Anzeige
 function formatPhoneForCall(phone: string): string {
   if (!phone) return ''
   const cleaned = phone.replace(/[^\d+]/g, '')
@@ -34,8 +33,17 @@ function formatPhoneForCall(phone: string): string {
   if (cleaned.startsWith('+')) return cleaned
   if (cleaned.startsWith('00')) return '+' + cleaned.slice(2)
   if (cleaned.startsWith('0')) return '+49' + cleaned.slice(1)
-  // 49xxx → +49xxx, oder beliebige andere Ziffern → einfach + davor
   return '+' + cleaned
+}
+
+function isValidEmail(email: string): boolean {
+  // Sehr simple Prüfung: enthält @ und einen Punkt nach dem @
+  const trimmed = email.trim()
+  if (!trimmed) return false
+  const atIdx = trimmed.indexOf('@')
+  if (atIdx < 1) return false
+  const afterAt = trimmed.slice(atIdx + 1)
+  return afterAt.includes('.') && afterAt.length >= 3
 }
 
 function statusBadgeClass(status: string): string {
@@ -83,8 +91,9 @@ export function CockpitClient({ initialDeck, setter }: Props) {
   const [searching, setSearching] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Edit-Phone Modal
+  // Edit-Modals
   const [editPhoneOpen, setEditPhoneOpen] = useState(false)
+  const [editEmailOpen, setEditEmailOpen] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -247,7 +256,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
     setActionModal('wiedervorlage')
   }
 
-  // Nicht erreicht — eskalierende Wartezeit je nach Anzahl Versuche
   async function handleSwipeRight() {
     if (!currentLead || savingAction) return
     setSavingAction(true)
@@ -378,7 +386,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         </button>
       </div>
 
-      {/* Such-Leiste */}
       <div className="px-4 pb-2 relative z-30">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
@@ -521,16 +528,33 @@ export function CockpitClient({ initialDeck, setter }: Props) {
                 <span className="text-gray-300">·</span>
                 <span>Hebamme</span>
               </div>
-              {currentLead.email && (
-                <div className="mt-1.5 text-xs text-gray-500 truncate flex items-center justify-center gap-1">
+              {/* E-Mail-Anzeige — mit Edit oder Hinzufügen */}
+              {currentLead.email ? (
+                <div className="mt-1.5 text-xs text-gray-500 flex items-center justify-center gap-1">
                   <span>📧</span>
-                  <span>{currentLead.email}</span>
+                  <span className="truncate max-w-[200px]">{currentLead.email}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditEmailOpen(true) }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="ml-0.5 p-0.5 text-gray-400 hover:text-gray-700 active:text-gray-900"
+                    aria-label="E-Mail bearbeiten"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
                 </div>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEditEmailOpen(true) }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs text-[#2E75B6] hover:text-[#1E3A5F] hover:bg-blue-50 active:bg-blue-100 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  E-Mail-Adresse hinzufügen
+                </button>
               )}
             </div>
           </div>
 
-          {/* Big Phone Button — mit + im Anruf-Link */}
           <a
             href={`tel:${formattedPhone}`}
             onClick={(e) => {
@@ -553,7 +577,6 @@ export function CockpitClient({ initialDeck, setter }: Props) {
             {formattedPhone || 'Keine Nummer'}
           </a>
 
-          {/* Telefonnummer ändern */}
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -626,6 +649,34 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         />
       )}
 
+      {/* Edit-Email Modal */}
+      {editEmailOpen && (
+        <EditEmailModal
+          lead={currentLead}
+          onClose={() => setEditEmailOpen(false)}
+          onSave={async (newEmail) => {
+            const { error } = await supabase
+              .from('leads')
+              .update({ email: newEmail })
+              .eq('id', currentLead.id)
+            if (error) {
+              toast.error('Fehler: ' + error.message)
+              return
+            }
+            await logActivity(
+              currentLead.id,
+              currentLead.status,
+              currentLead.email
+                ? `E-Mail geändert auf ${newEmail}`
+                : `E-Mail hinzugefügt: ${newEmail}`
+            )
+            setDeck(d => d.map((l, i) => i === currentIdx ? { ...l, email: newEmail } : l))
+            toast.success('✓ E-Mail gespeichert')
+            setEditEmailOpen(false)
+          }}
+        />
+      )}
+
       {actionModal === 'termin' && (
         <TerminModal
           lead={currentLead}
@@ -662,6 +713,7 @@ export function CockpitClient({ initialDeck, setter }: Props) {
         <PostTerminModal
           lead={currentLead}
           setter={setter}
+          onEditEmail={() => setEditEmailOpen(true)}
           onContinue={() => {
             setActionModal(null)
             advanceCard()
@@ -814,6 +866,86 @@ function EditPhoneModal({ lead, onClose, onSave }: {
           <button
             onClick={handleSave}
             disabled={saving || !phone.trim()}
+            className="flex-1 py-2.5 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white font-semibold disabled:opacity-50"
+          >
+            {saving ? 'Speichern…' : '✓ Speichern'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============== EDIT EMAIL MODAL ==============
+
+function EditEmailModal({ lead, onClose, onSave }: {
+  lead: Lead
+  onClose: () => void
+  onSave: (email: string) => void | Promise<void>
+}) {
+  const [email, setEmail] = useState(lead.email || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSave() {
+    const trimmed = email.trim()
+    if (!trimmed) return
+    if (!isValidEmail(trimmed)) {
+      setError('Bitte eine gültige E-Mail-Adresse eingeben (z.B. name@beispiel.de)')
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      await onSave(trimmed)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const isExisting = !!lead.email
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-[#1E3A5F]">
+            📧 E-Mail-Adresse {isExisting ? 'ändern' : 'hinzufügen'}
+          </h2>
+          <button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Für <strong>{lead.name}</strong>
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">E-Mail-Adresse</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => { setEmail(e.target.value); if (error) setError(null) }}
+            placeholder="name@beispiel.de"
+            className={
+              "w-full px-3 py-2 border rounded-lg text-sm text-gray-900 focus:outline-none " +
+              (error
+                ? "border-red-400 focus:ring-2 focus:ring-red-300"
+                : "border-gray-300 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6]")
+            }
+            autoFocus
+            autoComplete="email"
+            spellCheck={false}
+          />
+          {error && (
+            <p className="mt-1.5 text-xs text-red-600">{error}</p>
+          )}
+          <p className="mt-2 text-xs text-gray-500">
+            💡 Nach dem Speichern kannst du die Termin-Bestätigung über den E-Mail-Button verschicken.
+          </p>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">Abbrechen</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !email.trim()}
             className="flex-1 py-2.5 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white font-semibold disabled:opacity-50"
           >
             {saving ? 'Speichern…' : '✓ Speichern'}
@@ -1246,10 +1378,11 @@ function WiedervorlageModal({ onClose, onDone }: { onClose: () => void; onDone: 
 
 // ============== POST-TERMIN MODAL (Mail + WhatsApp) ==============
 
-function PostTerminModal({ lead, setter, onContinue }: {
+function PostTerminModal({ lead, setter, onContinue, onEditEmail }: {
   lead: Lead
   setter: Profile
   onContinue: () => void
+  onEditEmail: () => void
 }) {
   const [mailSent, setMailSent] = useState(false)
   const [waSent, setWaSent] = useState(false)
@@ -1321,32 +1454,50 @@ function PostTerminModal({ lead, setter, onContinue }: {
           </h3>
 
           <div className="space-y-2">
-            <button
-              onClick={openMail}
-              disabled={!lead.email}
-              className={"w-full text-left p-3.5 rounded-xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed " +
-                (mailSent
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-gray-200 hover:border-[#2E75B6] hover:bg-blue-50 active:scale-[0.98]')}
-            >
-              <div className="flex items-center gap-3">
-                <div className={"w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 " +
-                  (mailSent ? 'bg-green-500 text-white' : 'bg-[#2E75B6] text-white')}>
-                  {mailSent ? '✓' : '📧'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-gray-900">
-                    {mailSent ? 'E-Mail gesendet' : 'E-Mail-Bestätigung'}
+            {/* Mail-Button — wenn keine E-Mail vorhanden, wird's ein "hinzufügen"-Button */}
+            {lead.email ? (
+              <button
+                onClick={openMail}
+                className={"w-full text-left p-3.5 rounded-xl border-2 transition-all " +
+                  (mailSent
+                    ? 'border-green-300 bg-green-50'
+                    : 'border-gray-200 hover:border-[#2E75B6] hover:bg-blue-50 active:scale-[0.98]')}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={"w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 " +
+                    (mailSent ? 'bg-green-500 text-white' : 'bg-[#2E75B6] text-white')}>
+                    {mailSent ? '✓' : '📧'}
                   </div>
-                  <div className="text-xs text-gray-500 truncate">
-                    {lead.email || 'Keine E-Mail-Adresse vorhanden'}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-gray-900">
+                      {mailSent ? 'E-Mail gesendet' : 'E-Mail-Bestätigung'}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {lead.email}
+                    </div>
                   </div>
+                  {!mailSent && (
+                    <span className="text-gray-400 shrink-0">›</span>
+                  )}
                 </div>
-                {!mailSent && lead.email && (
+              </button>
+            ) : (
+              <button
+                onClick={onEditEmail}
+                className="w-full text-left p-3.5 rounded-xl border-2 border-dashed border-blue-300 hover:border-[#2E75B6] hover:bg-blue-50 active:scale-[0.98] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl shrink-0 bg-blue-100 text-[#2E75B6]">
+                    +
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-gray-900">E-Mail-Adresse hinzufügen</div>
+                    <div className="text-xs text-gray-500">Um die Bestätigung zu verschicken</div>
+                  </div>
                   <span className="text-gray-400 shrink-0">›</span>
-                )}
-              </div>
-            </button>
+                </div>
+              </button>
+            )}
 
             <button
               onClick={openWhatsapp}
