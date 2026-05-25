@@ -75,7 +75,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     setStep('preview')
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], 'application/vnd.ms-excel': ['.xls'] }, maxFiles: 1 })
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], 'application/vnd.ms-excel': ['.xls'], 'text/csv': ['.csv'] }, maxFiles: 1 })
 
   async function handleImport() {
     setLoading(true)
@@ -122,8 +122,8 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
             <div {...getRootProps()} className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${isDragActive ? 'border-[#2E75B6] bg-blue-50' : 'border-gray-300 hover:border-[#2E75B6]'}`}>
               <input {...getInputProps()} />
               <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-              <p className="font-medium text-gray-700">Excel-Datei hier ablegen</p>
-              <p className="text-sm text-gray-500 mt-1">oder klicken zum Auswählen (.xlsx, .xls)</p>
+              <p className="font-medium text-gray-700">Excel- oder CSV-Datei hier ablegen</p>
+              <p className="text-sm text-gray-500 mt-1">oder klicken zum Auswählen (.xlsx, .xls, .csv)</p>
               <div className="mt-4 text-xs text-gray-400 space-y-1">
                 <p>Erwartete Spalten: Name, Telefon, E-Mail, Bundesland, Gesamt, Lead, Alter, Signale</p>
                 <p className="text-[#2E75B6]">Bundesländer werden automatisch normalisiert (z.B. „BaWü" → „Baden-Württemberg")</p>
