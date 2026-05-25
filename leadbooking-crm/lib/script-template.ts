@@ -14,6 +14,22 @@ export interface Objection {
   answer: string
 }
 
+// Feste Plural-Zuordnung pro Beruf (für {beruf_plural}) — zentrale Quelle
+export const BERUF_PLURAL: Record<string, string> = {
+  'Psychotherapeut': 'Psychotherapeuten', 'Osteopath': 'Osteopathen', 'Logopäde': 'Logopäden',
+  'Ergotherapeut': 'Ergotherapeuten', 'Massagepraxis': 'Massagepraxen', 'Heilpraktiker': 'Heilpraktiker',
+  'Coach': 'Coaches', 'Fotografin': 'Fotografinnen', 'Yogalehrerin': 'Yogalehrerinnen',
+  'Personal Trainer': 'Personal Trainer', 'Kosmetikerin': 'Kosmetikerinnen', 'Nagelstudio': 'Nagelstudios',
+  'Handwerksmeister': 'Handwerksmeister', 'Ernährungsberater': 'Ernährungsberater', 'Hebamme': 'Hebammen',
+}
+
+// Beruf eines Leads in Singular + Plural auflösen (für {beruf} / {beruf_plural})
+export function resolveBeruf(lead: Lead): { beruf: string; berufPlural: string } {
+  const raw = ((lead as any).beruf || '').trim()
+  if (!raw) return { beruf: 'Fachkraft', berufPlural: 'Fachkräfte' }
+  return { beruf: raw, berufPlural: BERUF_PLURAL[raw] || raw }
+}
+
 export const SCRIPT_SECTIONS: ScriptSection[] = [
   {
     id: 'einstieg',
@@ -25,25 +41,25 @@ export const SCRIPT_SECTIONS: ScriptSection[] = [
     id: 'lokalisierung',
     emoji: '📍',
     title: 'Lokalisierung',
-    content: 'Sie arbeiten als Hebamme in {bundesland}, ist das richtig? Sehr gut.',
+    content: 'Sie arbeiten als {beruf} in {bundesland}, ist das richtig? Sehr gut.',
   },
   {
     id: 'hook',
     emoji: '🤝',
     title: 'Hook & Kooperation',
-    content: 'Ganz kurz, damit Sie mich einordnen: Wir arbeiten in einer Kooperation mit der Hebammen-Koordinierungsstelle in {bundesland} zusammen. In diesem Rahmen unterstützen wir Hebammen — Sie sind eine davon.',
+    content: 'Ganz kurz, damit Sie mich einordnen: Wir arbeiten mit selbstständigen {beruf_plural} in {bundesland} zusammen. In diesem Rahmen unterstützen wir {beruf_plural} — Sie sind eine davon.',
   },
   {
     id: 'problem',
     emoji: '💡',
     title: 'Problem-Pitch',
-    content: 'Konkret geht es darum: Da Sie als Hebamme Ihre Rentenkasse selbst bespielen — wird das Thema Altersvorsorge immer wichtiger. Das weiß auch der Bund, deshalb gibt es staatliche Unterstützung, die Sie nutzen können.',
+    content: 'Konkret geht es darum: Da Sie als {beruf} Ihre Rentenkasse selbst bespielen — wird das Thema Altersvorsorge immer wichtiger. Das weiß auch der Bund, deshalb gibt es staatliche Unterstützung, die Sie nutzen können.',
   },
   {
     id: 'angebot',
     emoji: '📅',
     title: 'Angebot',
-    content: 'Seit dem 01.04.2026 gibt es hierzu bundesweite Online-Beratungen speziell für Hebammen und medizinische Fachkräfte — zu den Themen Steueroptimierung, staatliche Förderung und Altersvorsorge. Frau {kunde_nachname}, klingt das erstmal grundsätzlich interessant für Sie?',
+    content: 'Seit dem 01.04.2026 gibt es hierzu bundesweite Online-Beratungen speziell für {beruf_plural} — zu den Themen Steueroptimierung, staatliche Förderung und Altersvorsorge. Frau {kunde_nachname}, klingt das erstmal grundsätzlich interessant für Sie?',
   },
   {
     id: 'qualifizierung',
@@ -76,7 +92,7 @@ export const OBJECTIONS: Objection[] = [
     id: 'kein-interesse',
     emoji: '❌',
     title: 'Kein Interesse',
-    answer: 'Verstehe ich, Frau {kunde_nachname}. Ganz kurz nachgefragt — wann haben Sie sich zuletzt überhaupt mal mit dem Thema Altersvorsorge beschäftigt?\n\nWissen Sie was: Genau das sagen mir 9 von 10 Hebammen zuerst. Und am Ende vom Termin sagen die meisten: „warum hab ich das nicht schon früher gemacht". Weil unsere Spezialistin Ihnen ganz konkret zeigt, welche Fördertöpfe der Bund speziell für Hebammen aufgemacht hat — da geht\'s um richtig Geld pro Monat, das aktuell auf der Straße liegt. Kostet nichts, völlig unverbindlich, 60 Minuten online. Sie verlieren nichts — entweder Sie nehmen was mit, oder Sie wissen wenigstens Bescheid. Probieren wir\'s einfach?',
+    answer: 'Verstehe ich, Frau {kunde_nachname}. Ganz kurz nachgefragt — wann haben Sie sich zuletzt überhaupt mal mit dem Thema Altersvorsorge beschäftigt?\n\nWissen Sie was: Genau das sagen mir 9 von 10 {beruf_plural} zuerst. Und am Ende vom Termin sagen die meisten: „warum hab ich das nicht schon früher gemacht". Weil unsere Spezialistin Ihnen ganz konkret zeigt, welche Fördertöpfe der Bund speziell für {beruf_plural} aufgemacht hat — da geht\'s um richtig Geld pro Monat, das aktuell auf der Straße liegt. Kostet nichts, völlig unverbindlich, 60 Minuten online. Sie verlieren nichts — entweder Sie nehmen was mit, oder Sie wissen wenigstens Bescheid. Probieren wir\'s einfach?',
   },
   {
     id: 'keine-zeit',
@@ -88,7 +104,7 @@ export const OBJECTIONS: Objection[] = [
     id: 'mail',
     emoji: '📧',
     title: 'Schicken Sie Infos',
-    answer: 'Mach ich gerne. Aber ganz ehrlich — Infos per Mail bringen Ihnen relativ wenig. Was bei einer Kollegin in Bayern voll zieht, passt bei Ihnen vielleicht gar nicht. Deshalb haben wir die Spezialistin: Die schaut sich Ihre konkrete Situation an und sagt Ihnen präzise, welche staatliche Förderung Sie als Hebamme bekommen — bis auf den Euro genau. In 60 Minuten haben Sie Klarheit. Sowas kriegen Sie über \'ne Mail nie. Wann hätten Sie\'s denn nächste Woche?',
+    answer: 'Mach ich gerne. Aber ganz ehrlich — Infos per Mail bringen Ihnen relativ wenig. Was bei einer Kollegin in Bayern voll zieht, passt bei Ihnen vielleicht gar nicht. Deshalb haben wir die Spezialistin: Die schaut sich Ihre konkrete Situation an und sagt Ihnen präzise, welche staatliche Förderung Sie als {beruf} bekommen — bis auf den Euro genau. In 60 Minuten haben Sie Klarheit. Sowas kriegen Sie über \'ne Mail nie. Wann hätten Sie\'s denn nächste Woche?',
   },
   {
     id: 'berater',
@@ -100,13 +116,13 @@ export const OBJECTIONS: Objection[] = [
     id: 'versorgt',
     emoji: '✅',
     title: 'Bin schon versorgt',
-    answer: 'Das freut mich für Sie. Aber ganz ehrlich — der Bund hat letztes Jahr und auch 2026 wieder neue Fördertöpfe extra für Selbstständige im Gesundheitswesen aufgemacht. Die meisten Hebammen wissen das nicht mal. Unsere Spezialistin schaut im Termin einfach drüber, ob da noch was Aktuelles für Sie dabei ist. Wenn nicht — super, dann sind Sie wirklich top versorgt. Wenn doch — haben Sie was Konkretes gewonnen.',
+    answer: 'Das freut mich für Sie. Aber ganz ehrlich — der Bund hat letztes Jahr und auch 2026 wieder neue Fördertöpfe extra für Selbstständige aufgemacht. Die meisten {beruf_plural} wissen das nicht mal. Unsere Spezialistin schaut im Termin einfach drüber, ob da noch was Aktuelles für Sie dabei ist. Wenn nicht — super, dann sind Sie wirklich top versorgt. Wenn doch — haben Sie was Konkretes gewonnen.',
   },
   {
     id: 'nummer',
     emoji: '⚠️',
     title: 'Woher Nummer?',
-    answer: 'Berechtigte Frage. Sie haben vor ein paar Tagen im Internet nach Infos zur Altersvorsorge für Hebammen gesucht und sich bei uns eingetragen — entweder über unsere Website, einen Newsletter oder eine unserer Anzeigen auf Facebook oder Instagram. Deshalb melde ich mich jetzt persönlich bei Ihnen. Können Sie sich erinnern?',
+    answer: 'Berechtigte Frage. Sie haben vor ein paar Tagen im Internet nach Infos zur Altersvorsorge für {beruf_plural} gesucht und sich bei uns eingetragen — entweder über unsere Website, einen Newsletter oder eine unserer Anzeigen auf Facebook oder Instagram. Deshalb melde ich mich jetzt persönlich bei Ihnen. Können Sie sich erinnern?',
   },
   {
     id: 'ueberlegen',
@@ -124,7 +140,7 @@ export const OBJECTIONS: Objection[] = [
     id: 'detail-frage',
     emoji: '🔍',
     title: 'Detail-Frage zum Thema',
-    answer: 'Gute Frage — und ehrlich gesagt, genau dafür haben wir die Spezialistin. Da gibt\'s so viele Details speziell für Hebammen, dass ich Ihnen jetzt am Telefon nichts Falsches sagen will. Aber wenn die Frage Sie umtreibt, ist das genau der richtige Punkt für die 60 Minuten. Da kriegen Sie die Antwort konkret, richtig und passgenau für Ihre Situation. Wann passt Ihnen der Termin?',
+    answer: 'Gute Frage — und ehrlich gesagt, genau dafür haben wir die Spezialistin. Da gibt\'s so viele Details speziell für {beruf_plural}, dass ich Ihnen jetzt am Telefon nichts Falsches sagen will. Aber wenn die Frage Sie umtreibt, ist das genau der richtige Punkt für die 60 Minuten. Da kriegen Sie die Antwort konkret, richtig und passgenau für Ihre Situation. Wann passt Ihnen der Termin?',
   },
 ]
 
@@ -139,6 +155,8 @@ export function renderTemplate(text: string, lead: Lead, setter: Partial<Profile
   const kundeVoll = lead.name || ''
   const kundeNachname = nameParts.length > 0 ? nameParts[nameParts.length - 1] : kundeVoll
   const kundeVorname = nameParts[0] || kundeVoll
+
+  const { beruf, berufPlural } = resolveBeruf(lead)
 
   // Termin-Datum/Uhrzeit (wenn vorhanden)
   let terminDatum = '[Datum]'
@@ -156,6 +174,8 @@ export function renderTemplate(text: string, lead: Lead, setter: Partial<Profile
     .replaceAll('{kunde_nachname}', kundeNachname)
     .replaceAll('{kunde}', kundeVorname)
     .replaceAll('{bundesland}', lead.state || '[Bundesland]')
+    .replaceAll('{beruf}', beruf)
+    .replaceAll('{beruf_plural}', berufPlural)
     .replaceAll('{email}', lead.email || '[E-Mail]')
     .replaceAll('{termin_datum}', terminDatum)
     .replaceAll('{termin_uhrzeit}', terminUhrzeit)

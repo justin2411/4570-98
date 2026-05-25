@@ -1,5 +1,7 @@
 import { Lead, Profile } from '@/types'
 import { buildEmailSignature } from './email-signature'
+import { resolveBeruf } from './script-template'
+import { cleanLeadName } from './clean-name'
 
 // ============================================================
 // TEMPLATE-DEFINITIONEN
@@ -37,7 +39,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultSubject: 'Bestätigung Ihres Beratungstermins am {termin_kurzdatum}',
     defaultBody: `Sehr geehrte Frau {kunde_nachname},
 
-vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für Hebammen.
+vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für {beruf_plural}.
 
 Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
 
@@ -113,7 +115,7 @@ Mit freundlichen Grüßen
     id: 'email_no_show',
     label: 'E-Mail No-Show Nachfassen',
     emoji: '🤷',
-    description: 'Wenn Hebamme zum Termin nicht erschienen ist',
+    description: 'Wenn der Lead zum Termin nicht erschienen ist',
     condition: (lead) => lead.status === 'termin_gelegt' || lead.status === 'termin_stattgefunden',
     defaultSubject: 'Schade — wir haben Sie heute vermisst',
     defaultBody: `Sehr geehrte Frau {kunde_nachname},
@@ -124,7 +126,7 @@ Falls etwas Wichtiges dazwischengekommen ist — kein Problem! Das kann jedem ma
 
 Möchten Sie einen neuen Termin vereinbaren? Antworten Sie einfach kurz auf diese E-Mail mit Ihren Wunschterminen, oder melden Sie sich telefonisch.
 
-Ich würde mich freuen, Sie kennenzulernen und Ihnen die staatlichen Förderungen für Hebammen zu zeigen.
+Ich würde mich freuen, Sie kennenzulernen und Ihnen die staatlichen Förderungen für {beruf_plural} zu zeigen.
 
 Mit freundlichen Grüßen
 
@@ -159,7 +161,7 @@ Bei Fragen oder falls etwas dazwischenkommt, melden Sie sich gerne jederzeit.
 
 Liebe Grüße
 {berater}
-von Hebammen-Vorsorge`,
+von {firma}`,
   },
   {
     id: 'wa_reminder',
@@ -225,12 +227,14 @@ Liebe Grüße
 // PLATZHALTER-LISTE
 // ============================================================
 export const PLACEHOLDERS = [
-  { key: '{kunde}', desc: 'Vorname der Hebamme', example: 'Anna' },
+  { key: '{kunde}', desc: 'Vorname des Leads', example: 'Anna' },
   { key: '{kunde_voll}', desc: 'Voller Name', example: 'Anna Müller' },
   { key: '{kunde_nachname}', desc: 'Nachname', example: 'Müller' },
   { key: '{berater}', desc: 'Dein Vorname', example: 'Justin' },
   { key: '{berater_voll}', desc: 'Dein voller Name', example: 'Justin Koch' },
   { key: '{bundesland}', desc: 'Bundesland', example: 'Bayern' },
+  { key: '{beruf}', desc: 'Beruf des Leads (Singular)', example: 'Hebamme' },
+  { key: '{beruf_plural}', desc: 'Beruf des Leads (Plural)', example: 'Hebammen' },
   { key: '{email}', desc: 'E-Mail des Leads', example: 'anna@example.de' },
   { key: '{termin_datum}', desc: 'Datum lang', example: 'Donnerstag, 15. Mai 2026' },
   { key: '{termin_kurzdatum}', desc: 'Datum kurz', example: '15.05.2026' },
@@ -260,8 +264,10 @@ export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>
   const setterFull = setter.full_name || 'Ihr Berater'
   const setterFirst = setterFull.split(' ')[0] || 'Ihr Berater'
 
-  const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p)
-  const kundeVoll = lead.name || ''
+  const { beruf, berufPlural } = resolveBeruf(lead)
+
+  const kundeVoll = cleanLeadName(lead.name, beruf)
+  const nameParts = kundeVoll.split(/\s+/).filter(p => p)
   const kundeNachname = nameParts.length > 0 ? nameParts[nameParts.length - 1] : kundeVoll
   const kundeVorname = nameParts[0] || kundeVoll
 
@@ -293,6 +299,8 @@ export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>
     .replaceAll('{kunde_nachname}', kundeNachname)
     .replaceAll('{kunde}', kundeVorname)
     .replaceAll('{bundesland}', lead.state || '[Bundesland]')
+    .replaceAll('{beruf}', beruf)
+    .replaceAll('{beruf_plural}', berufPlural)
     .replaceAll('{email}', lead.email || '[E-Mail]')
     .replaceAll('{termin_datum}', terminDatum)
     .replaceAll('{termin_kurzdatum}', terminKurz)

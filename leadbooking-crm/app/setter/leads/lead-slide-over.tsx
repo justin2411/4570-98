@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle, Globe, Pencil, Plus } from 'lucide-react'
 import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, buildWhatsappUrl } from '@/lib/message-templates'
+import { resolveBeruf } from '@/lib/script-template'
+import { cleanLeadName } from '@/lib/clean-name'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import toast from 'react-hot-toast'
 
@@ -39,14 +41,6 @@ type SetterLite = {
 
 const STATUS_ORDER: LeadStatus[] = ['angerufen', 'nicht_erreicht', 'wiedervorlage', 'termin_gelegt', 'termin_stattgefunden', 'kein_interesse']
 
-const BERUF_PLURAL: Record<string, string> = {
-  'Psychotherapeut': 'Psychotherapeuten', 'Osteopath': 'Osteopathen', 'Logopäde': 'Logopäden',
-  'Ergotherapeut': 'Ergotherapeuten', 'Massagepraxis': 'Massagepraxen', 'Heilpraktiker': 'Heilpraktiker',
-  'Coach': 'Coaches', 'Fotografin': 'Fotografinnen', 'Yogalehrerin': 'Yogalehrerinnen',
-  'Personal Trainer': 'Personal Trainer', 'Kosmetikerin': 'Kosmetikerinnen', 'Nagelstudio': 'Nagelstudios',
-  'Handwerksmeister': 'Handwerksmeister', 'Ernährungsberater': 'Ernährungsberater', 'Hebamme': 'Hebammen',
-}
-
 function getBeruf(lead: Lead): string { return ((lead as any).beruf || '').trim() }
 function getOrt(lead: Lead): string { return ((lead as any).ort || '').trim() }
 function getWebsite(lead: Lead): string { return ((lead as any).website || '').trim() }
@@ -55,8 +49,8 @@ function getListName(lead: Lead): string { return ((lead as any).list_name || ''
 function renderClusterText(text: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): string {
   const setterFull = setter?.full_name || 'Ihr Berater'
   const setterFirst = setterFull.split(' ')[0] || 'Ihr Berater'
-  const nameParts = (lead.name || '').trim().split(/\s+/).filter(Boolean)
-  const kundeVoll = lead.name || ''
+  const kundeVoll = cleanLeadName(lead.name, getBeruf(lead))
+  const nameParts = kundeVoll.split(/\s+/).filter(Boolean)
   const kundeNachname = nameParts.length ? nameParts[nameParts.length - 1] : kundeVoll
   const kundeVorname = nameParts[0] || kundeVoll
   let terminDatum = '[Datum]', terminKurz = '[Datum]', terminUhrzeit = '[Uhrzeit]'
@@ -67,8 +61,7 @@ function renderClusterText(text: string, lead: Lead, setter: SetterLite | null, 
     terminUhrzeit = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
   }
   const firma = cluster?.firma?.trim() || 'Hebammen-Vorsorge'
-  const beruf = getBeruf(lead) || 'Fachkraft'
-  const berufPlural = BERUF_PLURAL[getBeruf(lead)] || beruf
+  const { beruf, berufPlural } = resolveBeruf(lead)
   const ort = getOrt(lead) || lead.state || ''
   return (text || '')
     .replaceAll('{berater_voll}', setterFull)
@@ -333,7 +326,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
             <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest">
               {berufLabel}{position ? ` · ${position.current} / ${position.total}` : ''}
             </p>
-            <h2 className="font-bold text-xl text-white truncate">{lead.name}</h2>
+            <h2 className="font-bold text-xl text-white truncate">{cleanLeadName(lead.name, getBeruf(lead))}</h2>
           </div>
           {onNext && <button onClick={onNext} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Nächster Lead"><ChevronRight className="w-5 h-5 text-white" /></button>}
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Schließen"><X className="w-5 h-5 text-white" /></button>

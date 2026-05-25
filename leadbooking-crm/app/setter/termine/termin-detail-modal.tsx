@@ -8,6 +8,7 @@ import {
   buildWhatsappUrl, buildMailtoUrl, WHATSAPP_TEMPLATES, EMAIL_TEMPLATES
 } from '@/lib/message-templates'
 import { X, Calendar, Clock, Phone, Mail, MessageSquare, Edit2, Trash2, Send } from 'lucide-react'
+import { cleanLeadName } from '@/lib/clean-name'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -117,8 +118,8 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
             <div className="space-y-4">
               {/* Lead-Info */}
               <div className="text-center">
-                <h3 className="text-xl font-bold text-[#1E3A5F]">{lead.name}</h3>
-                <div className="mt-1 text-sm text-gray-600">{lead.state || '—'} · Hebamme</div>
+                <h3 className="text-xl font-bold text-[#1E3A5F]">{cleanLeadName(lead.name, (lead as any).beruf)}</h3>
+                <div className="mt-1 text-sm text-gray-600">{lead.state || '—'}{((lead as any).beruf || '').trim() ? ` · ${(lead as any).beruf}` : ''}</div>
               </div>
 
               {/* Termin-Card */}
