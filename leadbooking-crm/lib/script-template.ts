@@ -30,6 +30,14 @@ export function resolveBeruf(lead: Lead): { beruf: string; berufPlural: string }
   return { beruf: raw, berufPlural: BERUF_PLURAL[raw] || raw }
 }
 
+// Berufsspezifischer Firmenname für {firma} (z.B. "Heilpraktiker-Vorsorge").
+// Ohne hinterlegten Beruf: Fallback (z.B. Cluster-Firma) bzw. "Hebammen-Vorsorge".
+export function resolveFirma(lead: Lead, fallback?: string | null): string {
+  const raw = ((lead as any).beruf || '').trim()
+  if (raw) return `${resolveBeruf(lead).berufPlural}-Vorsorge`
+  return (fallback || '').trim() || 'Hebammen-Vorsorge'
+}
+
 export const SCRIPT_SECTIONS: ScriptSection[] = [
   {
     id: 'einstieg',
@@ -179,5 +187,5 @@ export function renderTemplate(text: string, lead: Lead, setter: Partial<Profile
     .replaceAll('{email}', lead.email || '[E-Mail]')
     .replaceAll('{termin_datum}', terminDatum)
     .replaceAll('{termin_uhrzeit}', terminUhrzeit)
-    .replaceAll('{firma}', 'Hebammen-Vorsorge')
+    .replaceAll('{firma}', resolveFirma(lead))
 }
