@@ -265,3 +265,36 @@ CREATE INDEX idx_activity_log_setter_id ON activity_log(setter_id);
 CREATE INDEX idx_activity_log_lead_id ON activity_log(lead_id);
 CREATE INDEX idx_activity_log_created_at ON activity_log(created_at);
 CREATE INDEX idx_leaderboard_setter_date ON leaderboard_cache(setter_id, date);
+
+-- Performance: kombinierte/zusätzliche Indizes für Cockpit- & Admin-Queries
+CREATE INDEX IF NOT EXISTS idx_leads_assigned_status ON leads(assigned_to, status);
+CREATE INDEX IF NOT EXISTS idx_leads_recall_date ON leads(recall_date);
+CREATE INDEX IF NOT EXISTS idx_leads_list_name ON leads(list_name);
+-- Schnelle Suche (ilike '%…%') auf Name & Telefon
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_leads_name_trgm ON leads USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_leads_phone_trgm ON leads USING gin (phone gin_trgm_ops);
+
+-- ============================================================
+-- Distinct Listen-Namen für „Admin → Inhalte" (statt Full-Table-Scan)
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_distinct_list_names()
+RETURNS TABLE (list_name text)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+  RETURN QUERY
+    SELECT DISTINCT l.list_name
+    FROM leads l
+    WHERE coalesce(l.list_name, '') <> ''
+    ORDER BY l.list_name;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_distinct_list_names() TO authenticated;
