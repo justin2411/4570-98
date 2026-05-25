@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
+import { formatPhoneForCall } from '@/lib/phone'
 import { StatusBadge } from '@/components/leads/status-badge'
 import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
@@ -363,7 +364,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
               </div>
             </div>
             <div className="flex items-center gap-3 text-sm mt-1 ml-6">
-              <span className="font-semibold text-gray-900">+{lead.phone.replace(/^\+/, '')}</span>
+              <span className="font-semibold text-gray-900">{formatPhoneForCall(lead.phone)}</span>
               {lead.email && <span className="text-gray-500 text-xs truncate">{lead.email}</span>}
             </div>
             <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 ml-6">
