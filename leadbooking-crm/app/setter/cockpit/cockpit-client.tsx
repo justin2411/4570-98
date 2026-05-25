@@ -50,6 +50,15 @@ function getOrt(lead: Lead): string { return ((lead as any).ort || '').trim() }
 function getWebsite(lead: Lead): string { return ((lead as any).website || '').trim() }
 function getListName(lead: Lead): string { return ((lead as any).list_name || '').trim() }
 
+// Feste Plural-Zuordnung pro Beruf (für {beruf_plural})
+const BERUF_PLURAL: Record<string, string> = {
+  'Psychotherapeut': 'Psychotherapeuten', 'Osteopath': 'Osteopathen', 'Logopäde': 'Logopäden',
+  'Ergotherapeut': 'Ergotherapeuten', 'Massagepraxis': 'Massagepraxen', 'Heilpraktiker': 'Heilpraktiker',
+  'Coach': 'Coaches', 'Fotografin': 'Fotografinnen', 'Yogalehrerin': 'Yogalehrerinnen',
+  'Personal Trainer': 'Personal Trainer', 'Kosmetikerin': 'Kosmetikerinnen', 'Nagelstudio': 'Nagelstudios',
+  'Handwerksmeister': 'Handwerksmeister', 'Ernährungsberater': 'Ernährungsberater', 'Hebamme': 'Hebammen',
+}
+
 // Fallback-Skript (altes Hebammen-Skript als durchgehender Text mit ##-Überschriften)
 const FALLBACK_SCRIPT = SCRIPT_SECTIONS.map(s => `## ${s.title}\n${s.content}`).join('\n\n')
 
@@ -92,6 +101,7 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
 
   const firma = cluster?.firma?.trim() || 'Hebammen-Vorsorge'
   const beruf = getBeruf(lead) || 'Fachkraft'
+  const berufPlural = BERUF_PLURAL[getBeruf(lead)] || beruf
   const ort = getOrt(lead) || lead.state || ''
 
   return (text || '')
@@ -103,6 +113,7 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
     .replaceAll('{bundesland}', lead.state || '[Bundesland]')
     .replaceAll('{ort}', ort || '[Ort]')
     .replaceAll('{beruf}', beruf)
+    .replaceAll('{beruf_plural}', berufPlural)
     .replaceAll('{email}', lead.email || '[E-Mail]')
     .replaceAll('{termin_datum}', terminDatum)
     .replaceAll('{termin_kurzdatum}', terminKurz)
