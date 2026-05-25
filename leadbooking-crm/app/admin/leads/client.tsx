@@ -8,7 +8,7 @@ import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
 import { FixStatesModal } from './fix-states-modal'
 import { Button } from '@/components/ui/button'
-import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen } from 'lucide-react'
+import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen, Briefcase, Tag } from 'lucide-react'
 
 interface Setter { id: string; full_name: string; avatar_color: string }
 interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string }
@@ -18,12 +18,14 @@ const VALID_STATUSES = new Set<LeadStatus>([
   'termin_gelegt', 'termin_stattgefunden', 'kein_interesse',
 ])
 
-// Defensiv: archived / list_name lesen, auch wenn der Lead-Type sie (noch) nicht kennt
 function isArchived(l: Lead): boolean {
   return (l as any).archived === true
 }
 function getListName(l: Lead): string {
   return ((l as any).list_name || '').trim()
+}
+function getBeruf(l: Lead): string {
+  return ((l as any).beruf || '').trim()
 }
 
 function matchesSearch(lead: Lead, q: string): boolean {
@@ -44,14 +46,15 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [showFixStates, setShowFixStates] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState<string[]>([])
+  const [listTarget, setListTarget] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>('unassigned')
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
   const [search, setSearch] = useState('')
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active')
   const [busy, setBusy] = useState(false)
-  // NEU: Listen-Filter (oberste Ebene)
   const [listFilter, setListFilter] = useState<string>('alle')
+  const [berufFilter, setBerufFilter] = useState<string>('alle')
 
   useEffect(() => {
     const ch = supabase.channel('admin-leads-realtime')
@@ -77,7 +80,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Alle vorhandenen Listen-Namen einsammeln
+  // ── Ebene 1: Listen ───────────────────────────────────────
   const allLists = useMemo(() => {
     const set = new Set<string>()
     leads.forEach(l => { const ln = getListName(l); if (ln) set.add(ln) })
@@ -85,38 +88,49 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   }, [leads])
   const hasUnlisted = useMemo(() => leads.some(l => !getListName(l)), [leads])
 
-  // 1) nach Liste filtern
   const listScopedLeads = useMemo(() => {
     if (listFilter === 'alle') return leads
     if (listFilter === '__none__') return leads.filter(l => !getListName(l))
     return leads.filter(l => getListName(l) === listFilter)
   }, [leads, listFilter])
 
-  // Aktiv/Archiv-Zähler innerhalb der gewählten Liste
+  // ── Ebene 2: Aktiv / Archiv ───────────────────────────────
   const activeCount = listScopedLeads.filter(l => !isArchived(l)).length
   const archivedCount = listScopedLeads.filter(l => isArchived(l)).length
+  const viewScopedLeads = listScopedLeads.filter(l => viewMode === 'archived' ? isArchived(l) : !isArchived(l))
 
-  // 2) nach Aktiv/Archiv filtern
-  const scopedLeads = listScopedLeads.filter(l => viewMode === 'archived' ? isArchived(l) : !isArchived(l))
+  // ── Ebene 3: Beruf (automatisch aus Daten) ────────────────
+  const allBerufe = useMemo(() => {
+    const map = new Map<string, number>()
+    viewScopedLeads.forEach(l => {
+      const b = getBeruf(l)
+      if (b) map.set(b, (map.get(b) || 0) + 1)
+    })
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]) // nach Anzahl
+  }, [viewScopedLeads])
+  const hasNoBeruf = useMemo(() => viewScopedLeads.some(l => !getBeruf(l)), [viewScopedLeads])
 
-  // 3) nach Setter-Tab
-  const unassigned = scopedLeads.filter(l => !l.assigned_to)
-  const adminLeads = scopedLeads.filter(l => l.assigned_to === adminId)
+  const berufScopedLeads = useMemo(() => {
+    if (berufFilter === 'alle') return viewScopedLeads
+    if (berufFilter === '__none__') return viewScopedLeads.filter(l => !getBeruf(l))
+    return viewScopedLeads.filter(l => getBeruf(l) === berufFilter)
+  }, [viewScopedLeads, berufFilter])
+
+  // ── Ebene 4: Setter-Tabs ──────────────────────────────────
+  const unassigned = berufScopedLeads.filter(l => !l.assigned_to)
+  const adminLeads = berufScopedLeads.filter(l => l.assigned_to === adminId)
   const tabs = [
     { id: 'unassigned', label: 'Nicht zugeteilt', count: unassigned.length },
     { id: adminId, label: 'Admin (meine)', count: adminLeads.length },
-    ...setters.map(s => ({ id: s.id, label: s.full_name, count: scopedLeads.filter(l => l.assigned_to === s.id).length })),
+    ...setters.map(s => ({ id: s.id, label: s.full_name, count: berufScopedLeads.filter(l => l.assigned_to === s.id).length })),
   ]
 
-  const tabLeads = activeTab === 'unassigned' ? unassigned : scopedLeads.filter(l => l.assigned_to === activeTab)
+  const tabLeads = activeTab === 'unassigned' ? unassigned : berufScopedLeads.filter(l => l.assigned_to === activeTab)
   const searched = useMemo(() => tabLeads.filter(l => matchesSearch(l, search)), [tabLeads, search])
 
   const filtered = useMemo(() => {
     if (statusFilter === 'alle') return searched
-    if (!VALID_STATUSES.has(statusFilter)) {
-      console.warn('[AdminLeadsClient] Unbekannter statusFilter:', statusFilter)
-      return searched
-    }
+    if (!VALID_STATUSES.has(statusFilter)) return searched
     return searched.filter(l => l.status === statusFilter)
   }, [searched, statusFilter])
 
@@ -124,44 +138,41 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   function toggleSelect(id: string) {
     setSelected(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s })
   }
+  function resetLower() { setActiveTab('unassigned'); setSelected(new Set()); setStatusFilter('alle') }
 
   async function refreshLeads() {
     const { data } = await supabase
       .from('leads')
       .select('*, profiles!leads_assigned_to_fkey(full_name, avatar_color)')
       .order('created_at', { ascending: false })
-    if (data) {
-      setLeads(data as never as Lead[])
-      setLastUpdate(new Date())
-    }
+    if (data) { setLeads(data as never as Lead[]); setLastUpdate(new Date()) }
   }
 
   async function setArchived(ids: string[], archived: boolean) {
     if (ids.length === 0 || busy) return
     const verb = archived ? 'archivieren' : 'reaktivieren'
-    if (ids.length > 1) {
-      const ok = window.confirm(`${ids.length} Leads ${verb}?`)
-      if (!ok) return
-    }
+    if (ids.length > 1 && !window.confirm(`${ids.length} Leads ${verb}?`)) return
     setBusy(true)
-    const { error } = await supabase
-      .from('leads')
-      .update({ archived } as any)
-      .in('id', ids)
+    const { error } = await supabase.from('leads').update({ archived } as any).in('id', ids)
     setBusy(false)
-    if (error) {
-      window.alert('Fehler beim ' + verb + ': ' + error.message)
-      return
-    }
+    if (error) { window.alert('Fehler beim ' + verb + ': ' + error.message); return }
     setLeads(prev => prev.map(l => ids.includes(l.id) ? ({ ...l, archived } as any) : l))
     setSelected(new Set())
   }
 
-  const selectedArr = Array.from(selected)
-
-  function resetToFirstTab() {
-    setActiveTab('unassigned'); setSelected(new Set()); setStatusFilter('alle')
+  async function assignToList(ids: string[], listName: string) {
+    if (ids.length === 0 || busy) return
+    const clean = listName.trim()
+    setBusy(true)
+    const { error } = await supabase.from('leads').update({ list_name: clean } as any).in('id', ids)
+    setBusy(false)
+    if (error) { window.alert('Fehler: ' + error.message); return }
+    setLeads(prev => prev.map(l => ids.includes(l.id) ? ({ ...l, list_name: clean } as any) : l))
+    setSelected(new Set())
+    setListTarget([])
   }
+
+  const selectedArr = Array.from(selected)
 
   return (
     <div className="space-y-4">
@@ -171,6 +182,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
           <p className="text-gray-700 text-sm mt-1">
             {activeCount} aktiv · {archivedCount} archiviert
             {listFilter !== 'alle' && <span className="text-gray-400"> · Liste „{listFilter === '__none__' ? 'Ohne Liste' : listFilter}"</span>}
+            {berufFilter !== 'alle' && <span className="text-gray-400"> · {berufFilter === '__none__' ? 'Ohne Beruf' : berufFilter}</span>}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -180,112 +192,120 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
           </button>
           <button onClick={selectAllInFiltered} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 hover:bg-gray-50">Alle sichtbaren ({filtered.length})</button>
 
-          {selected.size > 0 && viewMode === 'active' && (
+          {selected.size > 0 && (
             <>
-              <Button variant="secondary" onClick={() => setAssignTarget(selectedArr)}>
-                {selected.size} zuweisen
-              </Button>
               <button
-                onClick={() => setArchived(selectedArr, true)}
+                onClick={() => setListTarget(selectedArr)}
                 disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-800 text-sm font-semibold disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm font-semibold disabled:opacity-50"
               >
-                <Archive className="w-4 h-4" />
-                {selected.size} archivieren
+                <Tag className="w-4 h-4" />
+                {selected.size} zu Liste
               </button>
+              {viewMode === 'active' && (
+                <>
+                  <Button variant="secondary" onClick={() => setAssignTarget(selectedArr)}>
+                    {selected.size} zuweisen
+                  </Button>
+                  <button onClick={() => setArchived(selectedArr, true)} disabled={busy}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-800 text-sm font-semibold disabled:opacity-50">
+                    <Archive className="w-4 h-4" />{selected.size} archivieren
+                  </button>
+                </>
+              )}
+              {viewMode === 'archived' && (
+                <button onClick={() => setArchived(selectedArr, false)} disabled={busy}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-100 hover:bg-green-200 text-green-800 text-sm font-semibold disabled:opacity-50">
+                  <ArchiveRestore className="w-4 h-4" />{selected.size} reaktivieren
+                </button>
+              )}
             </>
-          )}
-          {selected.size > 0 && viewMode === 'archived' && (
-            <button
-              onClick={() => setArchived(selectedArr, false)}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-100 hover:bg-green-200 text-green-800 text-sm font-semibold disabled:opacity-50"
-            >
-              <ArchiveRestore className="w-4 h-4" />
-              {selected.size} reaktivieren
-            </button>
           )}
 
           <Button variant="secondary" onClick={() => setShowFixStates(true)}>
             <Wand2 className="w-4 h-4" />Bundesländer reparieren
           </Button>
-          <Button onClick={() => setShowUpload(true)}><Upload className="w-4 h-4" />Excel hochladen</Button>
+          <Button onClick={() => setShowUpload(true)}><Upload className="w-4 h-4" />Hochladen</Button>
         </div>
       </div>
 
-      {/* Listen-Ebene (oberste Gruppierung) — nur zeigen wenn Listen existieren */}
-      {allLists.length > 0 && (
+      {/* Listen-Ebene */}
+      {(allLists.length > 0 || hasUnlisted) && (
         <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E3A5F] uppercase tracking-wide px-1 self-center">
             <FolderOpen className="w-4 h-4" /> Listen
           </div>
-          <button
-            onClick={() => { setListFilter('alle'); resetToFirstTab() }}
-            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}
-          >
+          <button onClick={() => { setListFilter('alle'); setBerufFilter('alle'); resetLower() }}
+            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
             Alle Listen ({leads.length})
           </button>
-          {allLists.map(name => {
-            const count = leads.filter(l => getListName(l) === name).length
-            return (
-              <button
-                key={name}
-                onClick={() => { setListFilter(name); resetToFirstTab() }}
-                className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}
-              >
-                {name} ({count})
-              </button>
-            )
-          })}
+          {allLists.map(name => (
+            <button key={name} onClick={() => { setListFilter(name); setBerufFilter('alle'); resetLower() }}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+              {name} ({leads.filter(l => getListName(l) === name).length})
+            </button>
+          ))}
           {hasUnlisted && (
-            <button
-              onClick={() => { setListFilter('__none__'); resetToFirstTab() }}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === '__none__' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}
-            >
+            <button onClick={() => { setListFilter('__none__'); setBerufFilter('alle'); resetLower() }}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === '__none__' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               Ohne Liste ({leads.filter(l => !getListName(l)).length})
             </button>
           )}
         </div>
       )}
 
-      {/* Aktiv / Archiv Umschalter */}
+      {/* Aktiv / Archiv */}
       <div className="flex gap-2">
-        <button
-          onClick={() => { setViewMode('active'); resetToFirstTab() }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'active' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-        >
+        <button onClick={() => { setViewMode('active'); setBerufFilter('alle'); resetLower() }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'active' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
           Aktive Leads
           <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'active' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{activeCount}</span>
         </button>
-        <button
-          onClick={() => { setViewMode('archived'); resetToFirstTab() }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'archived' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-        >
-          <Archive className="w-4 h-4" />
-          Archiv
+        <button onClick={() => { setViewMode('archived'); setBerufFilter('alle'); resetLower() }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'archived' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+          <Archive className="w-4 h-4" />Archiv
           <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'archived' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{archivedCount}</span>
         </button>
       </div>
 
       {viewMode === 'archived' && (
         <div className="px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 text-sm text-orange-800">
-          📦 <strong>Archiv-Ansicht.</strong> Diese Leads sind für Setter unsichtbar — alle Infos (Status, Notizen, Anrufversuche) bleiben erhalten. Mit „Reaktivieren" kommen sie zurück ins Setter-Cockpit.
+          📦 <strong>Archiv-Ansicht.</strong> Diese Leads sind für Setter unsichtbar — alle Infos bleiben erhalten. Mit „Reaktivieren" kommen sie zurück.
+        </div>
+      )}
+
+      {/* Beruf-Ebene (automatisch aus Daten) */}
+      {allBerufe.length > 0 && (
+        <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-xl border border-teal-100">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-teal-800 uppercase tracking-wide px-1 self-center">
+            <Briefcase className="w-4 h-4" /> Berufe
+          </div>
+          <button onClick={() => { setBerufFilter('alle'); resetLower() }}
+            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${berufFilter === 'alle' ? 'bg-teal-700 text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+            Alle ({viewScopedLeads.length})
+          </button>
+          {allBerufe.map(([name, count]) => (
+            <button key={name} onClick={() => { setBerufFilter(name); resetLower() }}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${berufFilter === name ? 'bg-teal-700 text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+              {name} ({count})
+            </button>
+          ))}
+          {hasNoBeruf && (
+            <button onClick={() => { setBerufFilter('__none__'); resetLower() }}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${berufFilter === '__none__' ? 'bg-teal-700 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+              Ohne Beruf ({viewScopedLeads.filter(l => !getBeruf(l)).length})
+            </button>
+          )}
         </div>
       )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Suche nach Name, Telefonnummer oder E-Mail..."
-          className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
-        />
+          className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none" />
         {search && (
-          <button onClick={() => setSearch('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label="Suche löschen">
+          <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full" aria-label="Suche löschen">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         )}
@@ -322,22 +342,15 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         })}
       </div>
 
-      {statusFilter !== 'alle' && (
-        <p className="text-xs text-gray-500 italic">
-          Filter aktiv: <span className="font-semibold">{STATUS_CONFIG[statusFilter as LeadStatus]?.label ?? statusFilter}</span> · {filtered.length} {filtered.length === 1 ? 'Lead' : 'Leads'}
-        </p>
-      )}
-
       <div className="space-y-2">
         {filtered.map(lead => (
           <div key={lead.id} className={`bg-white border rounded-2xl px-5 py-4 hover:shadow-sm transition-all ${viewMode === 'archived' ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200 hover:border-[#2E75B6]'}`}>
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="mr-1" />
                 <span className="font-bold text-gray-900 text-[15px]">{lead.name}</span>
-                {getListName(lead) && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{getListName(lead)}</span>
-                )}
+                {getBeruf(lead) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 font-medium">{getBeruf(lead)}</span>}
+                {getListName(lead) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{getListName(lead)}</span>}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <StatusBadge status={lead.status} />
@@ -360,9 +373,16 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
               {lead.email && <span className="text-gray-500 text-xs truncate">{lead.email}</span>}
             </div>
             <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 ml-6">
-              {lead.age_indicator && <span>{lead.age_indicator.replace(/[^a-zA-ZäöüÄÖÜß0-9 .,()-]/g, '').trim()}</span>}
+              {(lead as any).ort && <span>{(lead as any).ort}</span>}
               {lead.state && <span>· {lead.state}</span>}
-              {lead.lead_quality && <span>· {lead.lead_quality}</span>}
+              {(lead as any).website && (
+                <a href={(lead as any).website.startsWith('http') ? (lead as any).website : `https://${(lead as any).website}`}
+                   target="_blank" rel="noopener noreferrer"
+                   onClick={e => e.stopPropagation()}
+                   className="text-[#2E75B6] hover:underline truncate max-w-[200px]">
+                  🌐 Website
+                </a>
+              )}
             </div>
           </div>
         ))}
@@ -376,6 +396,62 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
       {showUpload && <ExcelUpload adminId={adminId} setters={setters} onClose={() => setShowUpload(false)} onImported={newLeads => { setLeads(prev => [...newLeads, ...prev]); setShowUpload(false) }} />}
       {showFixStates && <FixStatesModal onClose={() => setShowFixStates(false)} onApplied={() => { setShowFixStates(false); window.location.reload() }} />}
       {assignTarget.length > 0 && <AssignModal leadIds={assignTarget} allLeads={leads} setters={setters} adminId={adminId} adminName="Admin" onClose={() => setAssignTarget([])} onAssigned={(leadIds, setterId) => { setLeads(prev => prev.map(l => leadIds.includes(l.id) ? { ...l, assigned_to: setterId } : l)); setAssignTarget([]); setSelected(new Set()) }} />}
+      {listTarget.length > 0 && <AssignListModal count={listTarget.length} existingLists={allLists} busy={busy} onClose={() => setListTarget([])} onAssign={(name) => assignToList(listTarget, name)} />}
+    </div>
+  )
+}
+
+// ============== LISTEN-ZUWEISUNGS-MODAL ==============
+function AssignListModal({ count, existingLists, busy, onClose, onAssign }: {
+  count: number
+  existingLists: string[]
+  busy: boolean
+  onClose: () => void
+  onAssign: (listName: string) => void
+}) {
+  const [newName, setNewName] = useState('')
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-[#1E3A5F]">📋 {count} Leads zu Liste</h2>
+          <button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+
+        <label className="block text-xs font-semibold text-gray-700 mb-1">Neue Liste erstellen</label>
+        <div className="flex gap-2 mb-4">
+          <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="z.B. Gesundheit"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none"
+            autoFocus />
+          <button onClick={() => newName.trim() && onAssign(newName)} disabled={busy || !newName.trim()}
+            className="px-4 py-2 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white text-sm font-semibold disabled:opacity-50">
+            Hinzufügen
+          </button>
+        </div>
+
+        {existingLists.length > 0 && (
+          <>
+            <label className="block text-xs font-semibold text-gray-700 mb-2">Oder bestehende Liste wählen</label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {existingLists.map(name => (
+                <button key={name} onClick={() => onAssign(name)} disabled={busy}
+                  className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+                  {name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="border-t border-gray-100 pt-3">
+          <button onClick={() => onAssign('')} disabled={busy}
+            className="text-xs text-gray-500 hover:text-red-600 hover:underline disabled:opacity-50">
+            Aus Liste entfernen (ohne Liste)
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
