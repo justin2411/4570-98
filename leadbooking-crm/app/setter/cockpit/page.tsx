@@ -41,13 +41,15 @@ export default async function CockpitPage() {
     .limit(100)
 
   // 2) Frische Leads (neu + angerufen)
+  // Nie angerufene Leads zuerst (höchste Effektivität), erst dann nach Score —
+  // bereits angerufene Leads rutschen so automatisch nach hinten.
   const { data: neueLeads } = await supabase
     .from('leads')
     .select('*')
     .eq('assigned_to', user.id)
     .in('status', ['neu', 'angerufen'])
-    .order('score', { ascending: false })
     .order('call_attempts', { ascending: true, nullsFirst: true })
+    .order('score', { ascending: false })
     .limit(100)
 
   // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen
