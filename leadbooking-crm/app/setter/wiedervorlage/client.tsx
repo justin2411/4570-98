@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Lead } from '@/types'
 import { Clock, Phone } from 'lucide-react'
 import { LeadSlideOver } from '../leads/lead-slide-over'
+import { cleanLeadName } from '@/lib/clean-name'
 
 type Tab = 'heute' | 'woche' | 'alle'
 
@@ -75,7 +76,7 @@ export function WiedervorlageClient({ leads: initialLeads, userId }: { leads: Le
               className={`w-full text-left bg-white border rounded-2xl px-5 py-4 hover:shadow-md transition-all ${overdue ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-purple-500'}`}>
               <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-bold text-gray-900 text-[15px] truncate">{lead.name}</span>
+                  <span className="font-bold text-gray-900 text-[15px] truncate">{cleanLeadName(lead.name, (lead as any).beruf)}</span>
                   {((lead as any).beruf || '').trim() && <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">{(lead as any).beruf}</span>}
                 </div>
                 {overdue && (

@@ -1,6 +1,7 @@
 import { Lead, Profile } from '@/types'
 import { buildEmailSignature } from './email-signature'
 import { resolveBeruf } from './script-template'
+import { cleanLeadName } from './clean-name'
 
 // ============================================================
 // TEMPLATE-DEFINITIONEN
@@ -263,12 +264,12 @@ export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>
   const setterFull = setter.full_name || 'Ihr Berater'
   const setterFirst = setterFull.split(' ')[0] || 'Ihr Berater'
 
-  const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p)
-  const kundeVoll = lead.name || ''
+  const { beruf, berufPlural } = resolveBeruf(lead)
+
+  const kundeVoll = cleanLeadName(lead.name, beruf)
+  const nameParts = kundeVoll.split(/\s+/).filter(p => p)
   const kundeNachname = nameParts.length > 0 ? nameParts[nameParts.length - 1] : kundeVoll
   const kundeVorname = nameParts[0] || kundeVoll
-
-  const { beruf, berufPlural } = resolveBeruf(lead)
 
   let terminDatum = '[Datum]'
   let terminKurz = '[Datum]'

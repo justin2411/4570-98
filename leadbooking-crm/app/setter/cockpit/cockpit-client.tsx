@@ -8,6 +8,7 @@ import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, 
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import { SCRIPT_SECTIONS, OBJECTIONS, resolveBeruf } from '@/lib/script-template'
+import { cleanLeadName } from '@/lib/clean-name'
 import { EMAIL_TEMPLATES, WHATSAPP_TEMPLATES, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import { CloserNotify } from '@/components/closer-notify'
 import toast from 'react-hot-toast'
@@ -75,8 +76,8 @@ function parseScriptSections(script: string): { title: string | null; body: stri
 function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, cluster: ClusterContent | null): string {
   const setterFull = setter.full_name || 'Ihr Berater'
   const setterFirst = setterFull.split(' ')[0] || 'Ihr Berater'
-  const nameParts = (lead.name || '').trim().split(/\s+/).filter(Boolean)
-  const kundeVoll = lead.name || ''
+  const kundeVoll = cleanLeadName(lead.name, getBeruf(lead))
+  const nameParts = kundeVoll.split(/\s+/).filter(Boolean)
   const kundeNachname = nameParts.length ? nameParts[nameParts.length - 1] : kundeVoll
   const kundeVorname = nameParts[0] || kundeVoll
 
@@ -398,7 +399,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
                 <button key={lead.id} onClick={() => selectSearchResult(lead)} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-100 last:border-b-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-[#1E3A5F] truncate">{lead.name}</div>
+                      <div className="text-sm font-semibold text-[#1E3A5F] truncate">{cleanLeadName(lead.name, getBeruf(lead))}</div>
                       <div className="text-xs text-gray-500 truncate">{formatPhoneForCall(lead.phone)}{lead.state ? <span className="text-gray-400"> · {lead.state}</span> : null}</div>
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-0.5">
@@ -445,7 +446,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
           )}
 
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-[#1E3A5F]">{currentLead.name}</h1>
+            <h1 className="text-2xl font-bold text-[#1E3A5F]">{cleanLeadName(currentLead.name, getBeruf(currentLead))}</h1>
             <div className="mt-2 text-sm text-gray-600">
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 <span>📍 {ortLabel}</span>
@@ -617,7 +618,7 @@ function EditPhoneModal({ lead, onClose, onSave }: { lead: Lead; onClose: () => 
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-[#1E3A5F]">📞 Telefonnummer ändern</h2><button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button></div>
-        <p className="text-sm text-gray-600 mb-4">Für <strong>{lead.name}</strong></p>
+        <p className="text-sm text-gray-600 mb-4">Für <strong>{cleanLeadName(lead.name, getBeruf(lead))}</strong></p>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Neue Telefonnummer</label>
           <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+49 151 12345678" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none" autoFocus />
@@ -650,7 +651,7 @@ function EditEmailModal({ lead, onClose, onSave }: { lead: Lead; onClose: () => 
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-[#1E3A5F]">📧 E-Mail-Adresse {isExisting ? 'ändern' : 'hinzufügen'}</h2><button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button></div>
-        <p className="text-sm text-gray-600 mb-4">Für <strong>{lead.name}</strong></p>
+        <p className="text-sm text-gray-600 mb-4">Für <strong>{cleanLeadName(lead.name, getBeruf(lead))}</strong></p>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">E-Mail-Adresse</label>
           <input type="email" value={email} onChange={e => { setEmail(e.target.value); if (error) setError(null) }} placeholder="name@beispiel.de"
@@ -814,7 +815,7 @@ function TerminModal({ lead, setter, onClose, onDone }: { lead: Lead; setter: Pr
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-[#1E3A5F]">🟡 Termin gelegt</h2><button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button></div>
-        <p className="text-sm text-gray-600 mb-4">Termin für <strong>{lead.name}</strong></p>
+        <p className="text-sm text-gray-600 mb-4">Termin für <strong>{cleanLeadName(lead.name, getBeruf(lead))}</strong></p>
         <div className="space-y-3">
           <div><label className="block text-xs font-medium text-gray-700 mb-1">Datum & Uhrzeit</label><input type="datetime-local" value={datetime} onChange={e => setDatetime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900" /></div>
           <div><label className="block text-xs font-medium text-gray-700 mb-1">Teams-Link</label><input type="url" value={teamsLink} onChange={e => setTeamsLink(e.target.value)} placeholder="https://teams.microsoft.com/..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900" />{setter.teams_room_url && <p className="mt-1 text-xs text-gray-500">Auto-eingefügt aus deinem Profil</p>}</div>
@@ -889,7 +890,7 @@ function PostTerminModal({ lead, setter, cluster, onContinue, onEditEmail }: { l
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 overflow-y-auto">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden my-4">
         <div className="bg-gradient-to-br from-green-500 to-green-600 px-5 py-5 text-white text-center">
-          <div className="text-4xl mb-1">🎉</div><h2 className="text-lg font-bold">Termin gespeichert!</h2><p className="text-sm text-white/90 mt-0.5">{lead.name}</p>
+          <div className="text-4xl mb-1">🎉</div><h2 className="text-lg font-bold">Termin gespeichert!</h2><p className="text-sm text-white/90 mt-0.5">{cleanLeadName(lead.name, getBeruf(lead))}</p>
         </div>
         <div className="px-5 pt-4">
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">

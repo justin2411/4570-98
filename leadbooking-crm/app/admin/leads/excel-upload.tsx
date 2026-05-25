@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { X, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import { Lead } from '@/types'
 import { normalizeState } from '@/lib/normalize-state'
+import { cleanLeadName } from '@/lib/clean-name'
 import toast from 'react-hot-toast'
 
 // Rohzeile kann BEIDE Formate haben (altes Excel + neue CSV)
@@ -78,11 +79,11 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     const leads: ParsedLead[] = rows.map(r => {
       const row = r as Record<string, unknown>
       // Felder aus altem ODER neuem Format ziehen
-      const name = pick(row, ['ansprechpartner', 'Name', 'name'])
-      const phone = pick(row, ['handynummer', 'Telefon', 'telefon', 'phone'])
-      const email = pick(row, ['email', 'E-Mail', 'e-mail', 'Email'])
       const rawState = pick(row, ['bundesland', 'Bundesland'])
       const beruf = pick(row, ['beruf', 'Beruf'])
+      const name = cleanLeadName(pick(row, ['ansprechpartner', 'Name', 'name']), beruf)
+      const phone = pick(row, ['handynummer', 'Telefon', 'telefon', 'phone'])
+      const email = pick(row, ['email', 'E-Mail', 'e-mail', 'Email'])
       const website = pick(row, ['website', 'Website', 'webseite', 'url'])
       const ort = pick(row, ['ort', 'Ort', 'stadt', 'Stadt'])
       const normalized = normalizeState(rawState)

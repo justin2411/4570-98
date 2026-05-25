@@ -6,6 +6,7 @@ import { Lead, LeadStatus } from '@/types'
 import { LeadSlideOver } from './lead-slide-over'
 import { Search, X, Phone } from 'lucide-react'
 import { formatPhoneForCall } from '@/lib/phone'
+import { cleanLeadName } from '@/lib/clean-name'
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
@@ -113,7 +114,7 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
             className="w-full text-left bg-white border border-gray-200 rounded-2xl px-5 py-4 hover:border-[#2E75B6] hover:shadow-md active:scale-[0.99] transition-all">
             <div className="flex items-center justify-between gap-3 mb-2">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="font-bold text-gray-900 text-[15px] truncate">{lead.name}</span>
+                <span className="font-bold text-gray-900 text-[15px] truncate">{cleanLeadName(lead.name, (lead as any).beruf)}</span>
                 {((lead as any).beruf || '').trim() && <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">{(lead as any).beruf}</span>}
                 {(lead.call_attempts ?? 0) > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200 px-1.5 py-0.5 rounded-full" title="Anrufversuche">
