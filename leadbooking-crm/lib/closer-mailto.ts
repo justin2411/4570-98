@@ -4,11 +4,14 @@
  * (Outlook wrappt Links und macht sie kaputt — der Closer trägt selbst ein).
  */
 
+import { cleanLeadName } from './clean-name'
+
 interface ClosierMailtoInput {
   closerName: string
   closerEmail: string
   leadId: string
   leadName: string
+  leadBeruf?: string | null
   leadPhone?: string
   leadEmail?: string | null
   leadState?: string
@@ -44,7 +47,9 @@ function formatPhone(phone?: string | null): string {
 }
 
 export function buildCloserMailto(input: ClosierMailtoInput): string {
-  const subject = `Neuer Beratungstermin: ${input.leadName} – ${fmtDate(input.appointmentDate)}`
+  const beruf = (input.leadBeruf || '').trim()
+  const cleanName = cleanLeadName(input.leadName, beruf)
+  const subject = `Neuer Beratungstermin: ${cleanName}${beruf ? ` (${beruf})` : ''} – ${fmtDate(input.appointmentDate)}`
   const firstName = input.closerName.split(' ')[0]
   const phone = formatPhone(input.leadPhone)
 
@@ -63,7 +68,8 @@ export function buildCloserMailto(input: ClosierMailtoInput): string {
     '',
     '👤  KUNDIN',
     '──────────────────────',
-    input.leadName,
+    cleanName,
+    beruf ? `💼  Beruf: ${beruf}` : null,
     `📞  ${phone}`,
     input.leadEmail ? `✉️  ${input.leadEmail}` : null,
     input.leadState ? `📍  ${input.leadState}` : null,
@@ -89,7 +95,6 @@ export function buildCloserMailto(input: ClosierMailtoInput): string {
   lines.push('Viel Erfolg im Gespräch!')
   lines.push('')
   lines.push(`– ${input.setterName}`)
-  lines.push('Hebammen-Vorsorge')
 
   const body = lines.filter(l => l !== null).join('\n')
 

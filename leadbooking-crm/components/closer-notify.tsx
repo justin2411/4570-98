@@ -77,6 +77,7 @@ export function CloserNotify({ lead, setterName, teamsLink, onCloserSet }: Props
       closerEmail: closer.email,
       leadId: lead.id,
       leadName: lead.name,
+      leadBeruf: (lead as any).beruf,
       leadPhone: lead.phone,
       leadEmail: lead.email,
       leadState: lead.state,

@@ -4,11 +4,14 @@
  * wenn METHOD:REQUEST gesetzt ist und ATTENDEE vorhanden ist.
  */
 
+import { cleanLeadName } from './clean-name'
+
 interface IcsInput {
   leadId: string
   appointmentDate: Date
   durationMinutes?: number // default 30
   leadName: string
+  leadBeruf?: string | null
   leadPhone?: string
   leadEmail?: string | null
   leadNotes?: string | null
@@ -64,8 +67,12 @@ export function generateIcs(input: IcsInput): string {
   const end = new Date(start.getTime() + duration * 60 * 1000)
   const now = new Date()
 
+  const beruf = (input.leadBeruf || '').trim()
+  const cleanName = cleanLeadName(input.leadName, beruf)
+
   const description = [
-    `Beratungstermin mit ${input.leadName}`,
+    `Beratungstermin mit ${cleanName}`,
+    beruf ? `💼 Beruf: ${beruf}` : '',
     '',
     `📞 Telefon: ${input.leadPhone ?? '—'}`,
     input.leadEmail ? `✉️ E-Mail: ${input.leadEmail}` : '',
@@ -79,7 +86,7 @@ export function generateIcs(input: IcsInput): string {
     .filter(Boolean)
     .join('\\n')
 
-  const summary = `Beratung ${input.leadName} — Hebammen-Vorsorge`
+  const summary = `Beratung ${cleanName}${beruf ? ` (${beruf})` : ''}`
 
   const lines = [
     'BEGIN:VCALENDAR',

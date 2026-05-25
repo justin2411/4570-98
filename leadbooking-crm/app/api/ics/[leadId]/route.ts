@@ -20,7 +20,7 @@ export async function GET(
   const { data: lead, error } = await supabase
     .from('leads')
     .select(`
-      id, name, phone, email, notes, appointment_date, teams_link, closer_id, assigned_to,
+      id, name, beruf, phone, email, notes, appointment_date, teams_link, closer_id, assigned_to,
       closers ( id, name, email, phone ),
       profiles!leads_assigned_to_fkey ( full_name, email, teams_room_url )
     `)
@@ -48,6 +48,7 @@ export async function GET(
     appointmentDate: new Date(lead.appointment_date),
     durationMinutes: 30,
     leadName: lead.name,
+    leadBeruf: (lead as { beruf?: string | null }).beruf,
     leadPhone: lead.phone,
     leadEmail: lead.email,
     leadNotes: lead.notes,
