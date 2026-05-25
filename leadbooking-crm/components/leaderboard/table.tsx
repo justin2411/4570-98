@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Avatar } from '@/components/ui/avatar'
 import { TrendingUp, TrendingDown, Minus, Crown, Info, RefreshCw } from 'lucide-react'
+import { berlinDate, berlinPeriodStart, addDaysStr } from '@/lib/dates'
 
 // ============================================================
 // TIER SYSTEM
@@ -48,14 +49,6 @@ function showRate(set: number, done: number) {
   return Math.round((done / set) * 100) + '%'
 }
 
-function periodStart(p: Period): string | null {
-  const now = new Date()
-  if (p === 'today') return now.toISOString().split('T')[0]
-  if (p === 'week') { const d = new Date(now); d.setDate(d.getDate() - d.getDay() + 1); return d.toISOString().split('T')[0] }
-  if (p === 'month') return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
-  return null
-}
-
 export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
   const supabase = createClient()
   const [entries, setEntries] = useState<Entry[]>([])
@@ -68,10 +61,8 @@ export function LeaderboardTable({ highlightId }: { highlightId?: string }) {
 
   async function load(p: Period) {
     setLoading(true)
-    const now = new Date()
-    const from = periodStart(p)
-    const yest = new Date(now); yest.setDate(yest.getDate() - 1)
-    const yestStr = yest.toISOString().split('T')[0]
+    const from = berlinPeriodStart(p)
+    const yestStr = addDaysStr(berlinDate(), -1)
 
     // Setter laden
     const { data: setters } = await supabase
