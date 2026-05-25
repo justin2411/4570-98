@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
 import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search, Pencil, Plus, Globe } from 'lucide-react'
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
+import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import { SCRIPT_SECTIONS, OBJECTIONS } from '@/lib/script-template'
 import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import { CloserNotify } from '@/components/closer-notify'
@@ -35,16 +36,6 @@ type ActionType = 'termin' | 'wiedervorlage' | 'kein_interesse' | 'termin_done' 
 // ───────────────────────────────────────────────────────────────
 function normalizePhone(phone: string): string { return (phone || '').replace(/\D/g, '') }
 
-function formatPhoneForCall(phone: string): string {
-  if (!phone) return ''
-  const cleaned = phone.replace(/[^\d+]/g, '')
-  if (!cleaned) return ''
-  if (cleaned.startsWith('+')) return cleaned
-  if (cleaned.startsWith('00')) return '+' + cleaned.slice(2)
-  if (cleaned.startsWith('0')) return '+49' + cleaned.slice(1)
-  return '+' + cleaned
-}
-
 function isValidEmail(email: string): boolean {
   const trimmed = email.trim()
   if (!trimmed) return false
@@ -58,8 +49,6 @@ function getBeruf(lead: Lead): string { return ((lead as any).beruf || '').trim(
 function getOrt(lead: Lead): string { return ((lead as any).ort || '').trim() }
 function getWebsite(lead: Lead): string { return ((lead as any).website || '').trim() }
 function getListName(lead: Lead): string { return ((lead as any).list_name || '').trim() }
-function websiteHref(url: string): string { return url.startsWith('http') ? url : `https://${url}` }
-function websiteLabel(url: string): string { return url.replace(/^https?:\/\//, '').replace(/\/$/, '') }
 
 // Fallback-Skript (altes Hebammen-Skript als durchgehender Text mit ##-Überschriften)
 const FALLBACK_SCRIPT = SCRIPT_SECTIONS.map(s => `## ${s.title}\n${s.content}`).join('\n\n')
@@ -330,6 +319,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
   const berufLabel = getBeruf(currentLead) || 'Fachkraft'
   const ortLabel = getOrt(currentLead) || currentLead.state || '—'
   const website = getWebsite(currentLead)
+  const showWebsite = isRealWebsite(website)
 
   return (
     <div className={"min-h-screen transition-colors " + (dark ? "bg-gradient-to-br from-gray-900 to-slate-800" : "bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]")} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -437,8 +427,8 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
             <Phone className="w-6 h-6" />{formattedPhone || 'Keine Nummer'}
           </a>
 
-          {/* Website-Zeile unter der Telefonnummer */}
-          {website && (
+          {/* Website-Zeile unter der Telefonnummer — nur wenn echte Adresse */}
+          {showWebsite && (
             <a href={websiteHref(website)} target="_blank" rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
               className="mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-[#2E75B6] text-sm font-medium transition-colors">
@@ -588,7 +578,7 @@ function EditPhoneModal({ lead, onClose, onSave }: { lead: Lead; onClose: () => 
           <label className="block text-xs font-medium text-gray-700 mb-1">Neue Telefonnummer</label>
           <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+49 151 12345678" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none" autoFocus />
           {previewPhone && previewPhone !== phone.trim() && <p className="mt-1.5 text-xs text-gray-500">Anruf läuft auf: <span className="font-mono text-[#2E75B6]">{previewPhone}</span></p>}
-          <p className="mt-2 text-xs text-gray-500">💡 Mit „+" am Anfang funktionieren Anrufe und WhatsApp am zuverlässigsten.</p>
+          <p className="mt-2 text-xs text-gray-500">💡 Wird automatisch ins +49-Format gebracht, damit Anrufe & WhatsApp zuverlässig funktionieren.</p>
         </div>
         <div className="mt-5 flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">Abbrechen</button>
