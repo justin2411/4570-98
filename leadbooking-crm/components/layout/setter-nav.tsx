@@ -134,8 +134,8 @@ export function SetterNav() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="grid grid-cols-5 h-16">
-          {/* Mobile zeigt: Home, Cockpit (highlight), Leads, Termine — Wiedervorlage über Leads erreichbar */}
-          {[links[0], links[1], links[2], links[4], links[5]].map(({ href, shortLabel, icon: Icon, highlight }) => {
+          {/* Mobile zeigt alle 5 Hauptbereiche: Home, Cockpit (highlight), Leads, Wiedervorlage, Termine */}
+          {[links[0], links[1], links[2], links[3], links[4]].map(({ href, shortLabel, icon: Icon, highlight }) => {
             const active = isActive(href)
             return (
               <Link
