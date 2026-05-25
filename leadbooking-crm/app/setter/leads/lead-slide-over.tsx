@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
-import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle, Globe } from 'lucide-react'
+import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle, Globe, Pencil, Plus } from 'lucide-react'
 import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, buildWhatsappUrl } from '@/lib/message-templates'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import toast from 'react-hot-toast'
@@ -154,6 +154,31 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
 
   const [cluster, setCluster] = useState<ClusterContent | null>(null)
 
+  const [editPhoneOpen, setEditPhoneOpen] = useState(false)
+  const [editEmailOpen, setEditEmailOpen] = useState(false)
+  const [phoneInput, setPhoneInput] = useState(lead.phone || '')
+  const [emailInput, setEmailInput] = useState(lead.email || '')
+  const [savingContact, setSavingContact] = useState(false)
+
+  async function savePhone() {
+    const v = phoneInput.trim(); if (!v) return
+    setSavingContact(true)
+    const { data, error } = await supabase.from('leads').update({ phone: v }).eq('id', lead.id).select().single()
+    setSavingContact(false)
+    if (error) { toast.error('Fehler: ' + error.message); return }
+    toast.success('✓ Telefonnummer aktualisiert'); onUpdate(data as Lead); setEditPhoneOpen(false)
+  }
+  async function saveEmail() {
+    const v = emailInput.trim()
+    if (v && !(v.includes('@') && v.split('@')[1]?.includes('.'))) { toast.error('Bitte gültige E-Mail'); return }
+    setSavingContact(true)
+    const { data, error } = await supabase.from('leads').update({ email: v || null }).eq('id', lead.id).select().single()
+    setSavingContact(false)
+    if (error) { toast.error('Fehler: ' + error.message); return }
+    toast.success('✓ E-Mail gespeichert'); onUpdate(data as Lead); setEditEmailOpen(false)
+  }
+
+
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -182,6 +207,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     setRecallDate(r ? r.toISOString().split('T')[0] : defaultRecallDate())
     setRecallTime(r ? r.toTimeString().slice(0, 5) : '10:00')
     setShowRecallDialog(false); setLoading(null)
+    setPhoneInput(lead.phone || ''); setEmailInput(lead.email || ''); setEditPhoneOpen(false); setEditEmailOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id])
 
@@ -320,6 +346,8 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
               {callCount > 0 ? (<><span className="font-semibold text-gray-700">{callCount}×</span> angerufen{lead.last_call_attempt && <> · zuletzt {formatRelative(lead.last_call_attempt)}</>}</>) : (<span className="text-gray-400">Noch nicht angerufen</span>)}
             </p>
             <button type="button" onClick={handleCallClick} className="text-[11px] font-medium px-2.5 py-1 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 rounded-md transition-all whitespace-nowrap">+ Anruf zählen</button>
+            <button type="button" onClick={() => { setPhoneInput(lead.phone || ''); setEditPhoneOpen(true) }} className="text-[11px] font-medium px-2.5 py-1 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 rounded-md transition-all whitespace-nowrap flex items-center gap-1"><Pencil className="w-3 h-3" />Nr.</button>
+            <button type="button" onClick={() => { setEmailInput(lead.email || ''); setEditEmailOpen(true) }} className="text-[11px] font-medium px-2.5 py-1 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 rounded-md transition-all whitespace-nowrap flex items-center gap-1">{lead.email ? <Pencil className="w-3 h-3" /> : <Plus className="w-3 h-3" />}E-Mail</button>
           </div>
         </div>
 
@@ -420,6 +448,33 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
           {onNext && <button onClick={onNext} className="mt-3 w-full min-h-[44px] py-2.5 rounded-xl bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100 text-sm font-medium text-gray-600 transition-colors flex items-center justify-center gap-2"><SkipForward className="w-4 h-4" />Überspringen (→ nächster Lead)</button>}
         </div>
       </div>
+
+      {editPhoneOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={() => setEditPhoneOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg text-[#1E3A5F] mb-3">📞 Telefonnummer ändern</h3>
+            <input type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)} placeholder="+49 151 12345678" autoFocus className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
+            <p className="mt-1.5 text-[11px] text-gray-500">Wird beim Anrufen automatisch ins +49-Format gebracht.</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setEditPhoneOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">Abbrechen</button>
+              <button onClick={savePhone} disabled={savingContact || !phoneInput.trim()} className="flex-1 py-2.5 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white font-semibold disabled:opacity-50">{savingContact ? 'Speichern…' : '✓ Speichern'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editEmailOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={() => setEditEmailOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg text-[#1E3A5F] mb-3">📧 E-Mail {lead.email ? 'ändern' : 'hinzufügen'}</h3>
+            <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="name@beispiel.de" autoFocus autoComplete="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setEditEmailOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">Abbrechen</button>
+              <button onClick={saveEmail} disabled={savingContact} className="flex-1 py-2.5 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white font-semibold disabled:opacity-50">{savingContact ? 'Speichern…' : '✓ Speichern'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showRecallDialog && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
