@@ -24,7 +24,7 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/login') || path.startsWith('/passwort-reset')
   const isPublicAsset = path === '/' || path.startsWith('/_next') || path === '/manifest.json' || path === '/sw.js' || path === '/favicon.ico' || path.startsWith('/icons') || path.startsWith('/api/auth')
-  const isProtected = path.startsWith('/admin') || path.startsWith('/setter') || path.startsWith('/advisor') || path.startsWith('/dashboard-redirect') || path.startsWith('/rangliste')
+  const isProtected = path.startsWith('/admin') || path.startsWith('/setter') || path.startsWith('/advisor') || path.startsWith('/dashboard-redirect')
 
   // Nicht eingeloggt + geschützte Route → /login
   if (!user && isProtected) {

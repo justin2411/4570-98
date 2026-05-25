@@ -164,7 +164,7 @@ CREATE OR REPLACE FUNCTION refresh_leaderboard_cache()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_setter_id uuid;
-  v_date date := CURRENT_DATE;
+  v_date date := (now() AT TIME ZONE 'Europe/Berlin')::date;
   v_calls int;
   v_set int;
   v_done int;
@@ -179,30 +179,30 @@ BEGIN
   SELECT COUNT(*) INTO v_calls
   FROM activity_log
   WHERE setter_id = v_setter_id
-    AND DATE(created_at) = v_date
+    AND (created_at AT TIME ZONE 'Europe/Berlin')::date = v_date
     AND new_status IN ('angerufen','nicht_erreicht','termin_gelegt','termin_stattgefunden');
 
   -- Termine gelegt heute
   SELECT COUNT(*) INTO v_set
   FROM activity_log
   WHERE setter_id = v_setter_id
-    AND DATE(created_at) = v_date
+    AND (created_at AT TIME ZONE 'Europe/Berlin')::date = v_date
     AND new_status = 'termin_gelegt';
 
   -- Termine stattgefunden heute
   SELECT COUNT(*) INTO v_done
   FROM activity_log
   WHERE setter_id = v_setter_id
-    AND DATE(created_at) = v_date
+    AND (created_at AT TIME ZONE 'Europe/Berlin')::date = v_date
     AND new_status = 'termin_stattgefunden';
 
   -- Streak (aufeinanderfolgende stattgefundene)
   SELECT COUNT(*) INTO v_streak
   FROM (
-    SELECT DATE(created_at) AS d
+    SELECT (created_at AT TIME ZONE 'Europe/Berlin')::date AS d
     FROM activity_log
     WHERE setter_id = v_setter_id AND new_status = 'termin_stattgefunden'
-    GROUP BY DATE(created_at)
+    GROUP BY (created_at AT TIME ZONE 'Europe/Berlin')::date
     ORDER BY d DESC
   ) sub;
 
