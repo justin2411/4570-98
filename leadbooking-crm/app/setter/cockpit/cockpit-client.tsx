@@ -7,7 +7,7 @@ import { Lead, Profile } from '@/types'
 import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search, Pencil, Plus, Globe } from 'lucide-react'
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
-import { SCRIPT_SECTIONS, OBJECTIONS } from '@/lib/script-template'
+import { SCRIPT_SECTIONS, OBJECTIONS, resolveBeruf } from '@/lib/script-template'
 import { EMAIL_TEMPLATES, WHATSAPP_TEMPLATES, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import { CloserNotify } from '@/components/closer-notify'
 import toast from 'react-hot-toast'
@@ -50,15 +50,6 @@ function getOrt(lead: Lead): string { return ((lead as any).ort || '').trim() }
 function getWebsite(lead: Lead): string { return ((lead as any).website || '').trim() }
 function getListName(lead: Lead): string { return ((lead as any).list_name || '').trim() }
 
-// Feste Plural-Zuordnung pro Beruf (für {beruf_plural})
-const BERUF_PLURAL: Record<string, string> = {
-  'Psychotherapeut': 'Psychotherapeuten', 'Osteopath': 'Osteopathen', 'Logopäde': 'Logopäden',
-  'Ergotherapeut': 'Ergotherapeuten', 'Massagepraxis': 'Massagepraxen', 'Heilpraktiker': 'Heilpraktiker',
-  'Coach': 'Coaches', 'Fotografin': 'Fotografinnen', 'Yogalehrerin': 'Yogalehrerinnen',
-  'Personal Trainer': 'Personal Trainer', 'Kosmetikerin': 'Kosmetikerinnen', 'Nagelstudio': 'Nagelstudios',
-  'Handwerksmeister': 'Handwerksmeister', 'Ernährungsberater': 'Ernährungsberater', 'Hebamme': 'Hebammen',
-}
-
 // Fallback-Skript (altes Hebammen-Skript als durchgehender Text mit ##-Überschriften)
 const FALLBACK_SCRIPT = SCRIPT_SECTIONS.map(s => `## ${s.title}\n${s.content}`).join('\n\n')
 
@@ -100,8 +91,7 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
   }
 
   const firma = cluster?.firma?.trim() || 'Hebammen-Vorsorge'
-  const beruf = getBeruf(lead) || 'Fachkraft'
-  const berufPlural = BERUF_PLURAL[getBeruf(lead)] || beruf
+  const { beruf, berufPlural } = resolveBeruf(lead)
   const ort = getOrt(lead) || lead.state || ''
 
   return (text || '')

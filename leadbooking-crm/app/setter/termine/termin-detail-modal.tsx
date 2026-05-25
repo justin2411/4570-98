@@ -118,7 +118,7 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
               {/* Lead-Info */}
               <div className="text-center">
                 <h3 className="text-xl font-bold text-[#1E3A5F]">{lead.name}</h3>
-                <div className="mt-1 text-sm text-gray-600">{lead.state || '—'} · Hebamme</div>
+                <div className="mt-1 text-sm text-gray-600">{lead.state || '—'}{((lead as any).beruf || '').trim() ? ` · ${(lead as any).beruf}` : ''}</div>
               </div>
 
               {/* Termin-Card */}

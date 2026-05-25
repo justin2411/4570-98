@@ -76,7 +76,7 @@ export function WiedervorlageClient({ leads: initialLeads, userId }: { leads: Le
               <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-bold text-gray-900 text-[15px] truncate">{lead.name}</span>
-                  <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">Hebamme</span>
+                  {((lead as any).beruf || '').trim() && <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">{(lead as any).beruf}</span>}
                 </div>
                 {overdue && (
                   <span className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Überfällig</span>
