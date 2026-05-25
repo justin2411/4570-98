@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
-import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle } from 'lucide-react'
-import { applicableTemplates, buildWhatsappUrl } from '@/lib/whatsapp-templates'
-import { buildEmailSignature } from '@/lib/email-signature'
+import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle, Globe } from 'lucide-react'
+import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, buildWhatsappUrl } from '@/lib/message-templates'
+import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -18,21 +18,118 @@ interface Props {
   position?: { current: number; total: number }
 }
 
+interface ClusterContent {
+  list_name: string
+  firma: string
+  web: string
+  kontakt_email: string
+  tagline: string
+  script: string
+  templates: Record<string, { text?: string; subject?: string; body?: string }>
+}
+
+type SetterLite = {
+  full_name: string
+  role_title: string | null
+  teams_room_url: string | null
+  phone_direct: string | null
+  custom_signature: string | null
+  use_custom_signature: boolean
+}
+
 const STATUS_ORDER: LeadStatus[] = ['angerufen', 'nicht_erreicht', 'wiedervorlage', 'termin_gelegt', 'termin_stattgefunden', 'kein_interesse']
 
-function defaultRecallDate() {
-  const d = new Date(); d.setDate(d.getDate() + 1)
-  return d.toISOString().split('T')[0]
+const BERUF_PLURAL: Record<string, string> = {
+  'Psychotherapeut': 'Psychotherapeuten', 'Osteopath': 'Osteopathen', 'Logopäde': 'Logopäden',
+  'Ergotherapeut': 'Ergotherapeuten', 'Massagepraxis': 'Massagepraxen', 'Heilpraktiker': 'Heilpraktiker',
+  'Coach': 'Coaches', 'Fotografin': 'Fotografinnen', 'Yogalehrerin': 'Yogalehrerinnen',
+  'Personal Trainer': 'Personal Trainer', 'Kosmetikerin': 'Kosmetikerinnen', 'Nagelstudio': 'Nagelstudios',
+  'Handwerksmeister': 'Handwerksmeister', 'Ernährungsberater': 'Ernährungsberater', 'Hebamme': 'Hebammen',
 }
+
+function getBeruf(lead: Lead): string { return ((lead as any).beruf || '').trim() }
+function getOrt(lead: Lead): string { return ((lead as any).ort || '').trim() }
+function getWebsite(lead: Lead): string { return ((lead as any).website || '').trim() }
+function getListName(lead: Lead): string { return ((lead as any).list_name || '').trim() }
+
+function renderClusterText(text: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): string {
+  const setterFull = setter?.full_name || 'Ihr Berater'
+  const setterFirst = setterFull.split(' ')[0] || 'Ihr Berater'
+  const nameParts = (lead.name || '').trim().split(/\s+/).filter(Boolean)
+  const kundeVoll = lead.name || ''
+  const kundeNachname = nameParts.length ? nameParts[nameParts.length - 1] : kundeVoll
+  const kundeVorname = nameParts[0] || kundeVoll
+  let terminDatum = '[Datum]', terminKurz = '[Datum]', terminUhrzeit = '[Uhrzeit]'
+  if (lead.appointment_date) {
+    const d = new Date(lead.appointment_date)
+    terminDatum = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    terminKurz = d.toLocaleDateString('de-DE')
+    terminUhrzeit = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  }
+  const firma = cluster?.firma?.trim() || 'Hebammen-Vorsorge'
+  const beruf = getBeruf(lead) || 'Fachkraft'
+  const berufPlural = BERUF_PLURAL[getBeruf(lead)] || beruf
+  const ort = getOrt(lead) || lead.state || ''
+  return (text || '')
+    .replaceAll('{berater_voll}', setterFull)
+    .replaceAll('{berater}', setterFirst)
+    .replaceAll('{kunde_voll}', kundeVoll)
+    .replaceAll('{kunde_nachname}', kundeNachname)
+    .replaceAll('{kunde}', kundeVorname)
+    .replaceAll('{bundesland}', lead.state || '[Bundesland]')
+    .replaceAll('{ort}', ort || '[Ort]')
+    .replaceAll('{beruf}', beruf)
+    .replaceAll('{beruf_plural}', berufPlural)
+    .replaceAll('{email}', lead.email || '[E-Mail]')
+    .replaceAll('{termin_datum}', terminDatum)
+    .replaceAll('{termin_kurzdatum}', terminKurz)
+    .replaceAll('{termin_uhrzeit}', terminUhrzeit)
+    .replaceAll('{teams_link}', lead.teams_link || '[Teams-Link]')
+    .replaceAll('{firma}', firma)
+    .replaceAll('{web}', cluster?.web || '')
+}
+
+function buildClusterSignature(setter: SetterLite | null, cluster: ClusterContent | null): string {
+  if (setter?.use_custom_signature && setter.custom_signature?.trim()) return setter.custom_signature.trim()
+  const name = setter?.full_name || 'Ihr Berater'
+  const role = setter?.role_title || 'Beratungsteam'
+  const phone = setter?.phone_direct?.trim()
+  const firma = (cluster?.firma?.trim() || 'Hebammen-Vorsorge').toUpperCase()
+  const web = cluster?.web?.trim() || 'www.hebammen-vorsorge.de'
+  const email = cluster?.kontakt_email?.trim() || 'beratung@hebammen-vorsorge.de'
+  const tagline = cluster?.tagline?.trim() || 'Altersvorsorge & Vermögensaufbau'
+  let sig = `${name}\n${role}`
+  if (phone) sig += `\nTel: ${phone}`
+  sig += `\n\n\n────────────────────────────────────────\n\n   ${firma}\n   ${tagline}\n\n   E-Mail:   ${email}\n   Web:      ${web}\n\n────────────────────────────────────────`
+  return sig
+}
+
+function renderClusterWhatsapp(templateId: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): string {
+  const fromCluster = cluster?.templates?.[templateId]?.text
+  const def = WHATSAPP_TEMPLATES.find(t => t.id === templateId)?.defaultText || ''
+  const text = (fromCluster && fromCluster.trim()) ? fromCluster : def
+  return renderClusterText(text, lead, setter, cluster)
+}
+
+function renderClusterEmail(templateId: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): { subject: string; body: string } {
+  const def = EMAIL_TEMPLATES.find(t => t.id === templateId)
+  const fromCluster = cluster?.templates?.[templateId]
+  const subjT = (fromCluster?.subject && fromCluster.subject.trim()) ? fromCluster.subject : (def?.defaultSubject || '')
+  let bodyT = (fromCluster?.body && fromCluster.body.trim()) ? fromCluster.body : (def?.defaultBody || '')
+  bodyT = bodyT.replaceAll('{signature}', buildClusterSignature(setter, cluster))
+  return { subject: renderClusterText(subjT, lead, setter, cluster), body: renderClusterText(bodyT, lead, setter, cluster) }
+}
+
+function defaultRecallDate() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
 
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso); const now = new Date()
   const diff = (now.getTime() - d.getTime()) / 1000
   if (diff < 60) return 'gerade eben'
-  if (diff < 3600) return 'vor ' + Math.floor(diff/60) + ' Min'
-  if (diff < 86400) return 'vor ' + Math.floor(diff/3600) + ' Std'
-  return 'vor ' + Math.floor(diff/86400) + ' Tagen'
+  if (diff < 3600) return 'vor ' + Math.floor(diff / 60) + ' Min'
+  if (diff < 86400) return 'vor ' + Math.floor(diff / 3600) + ' Std'
+  return 'vor ' + Math.floor(diff / 86400) + ' Tagen'
 }
 
 export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev, position }: Props) {
@@ -43,49 +140,49 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
   const [notizText, setNotizText] = useState(lead.notes || '')
   const existing = lead.appointment_date ? new Date(lead.appointment_date) : null
   const [apptDate, setApptDate] = useState(existing ? existing.toISOString().split('T')[0] : '')
-  const [apptTime, setApptTime] = useState(existing ? existing.toTimeString().slice(0,5) : '')
+  const [apptTime, setApptTime] = useState(existing ? existing.toTimeString().slice(0, 5) : '')
   const [teamsLinkInput, setTeamsLinkInput] = useState(lead.teams_link || '')
 
   const existingRecall = lead.recall_date ? new Date(lead.recall_date) : null
   const [showRecallDialog, setShowRecallDialog] = useState(false)
   const [recallDate, setRecallDate] = useState(existingRecall ? existingRecall.toISOString().split('T')[0] : defaultRecallDate())
-  const [recallTime, setRecallTime] = useState(existingRecall ? existingRecall.toTimeString().slice(0,5) : '10:00')
+  const [recallTime, setRecallTime] = useState(existingRecall ? existingRecall.toTimeString().slice(0, 5) : '10:00')
   const [savingRecall, setSavingRecall] = useState(false)
 
-  // Setter-Profil komplett laden (für WhatsApp-Signatur + Mail + Teams-Link)
-  const [setterProfile, setSetterProfile] = useState<{
-    full_name: string
-    role_title: string | null
-    teams_room_url: string | null
-    phone_direct: string | null
-    custom_signature: string | null
-    use_custom_signature: boolean
-  } | null>(null)
+  const [setterProfile, setSetterProfile] = useState<SetterLite | null>(null)
   const setterName = setterProfile?.full_name || ''
+
+  const [cluster, setCluster] = useState<ClusterContent | null>(null)
 
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!userId) return
-    supabase
-      .from('profiles')
-      .select('full_name, role_title, teams_room_url, phone_direct, custom_signature, use_custom_signature')
-      .eq('id', userId)
-      .single()
-      .then(({ data }) => { if (data) setSetterProfile(data as any) })
+    supabase.from('profiles').select('full_name, role_title, teams_room_url, phone_direct, custom_signature, use_custom_signature')
+      .eq('id', userId).single().then(({ data }) => { if (data) setSetterProfile(data as any) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
+
+  // Cluster-Inhalte zum Lead laden (anhand list_name)
+  useEffect(() => {
+    const ln = getListName(lead)
+    if (!ln) { setCluster(null); return }
+    supabase.from('cluster_content').select('*').eq('list_name', ln).maybeSingle()
+      .then(({ data }) => setCluster((data as any) || null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id])
 
   useEffect(() => {
     setNotizText(lead.notes || '')
     const e = lead.appointment_date ? new Date(lead.appointment_date) : null
     setApptDate(e ? e.toISOString().split('T')[0] : '')
-    setApptTime(e ? e.toTimeString().slice(0,5) : '')
+    setApptTime(e ? e.toTimeString().slice(0, 5) : '')
     setTeamsLinkInput(lead.teams_link || setterProfile?.teams_room_url || '')
     const r = lead.recall_date ? new Date(lead.recall_date) : null
     setRecallDate(r ? r.toISOString().split('T')[0] : defaultRecallDate())
-    setRecallTime(r ? r.toTimeString().slice(0,5) : '10:00')
+    setRecallTime(r ? r.toTimeString().slice(0, 5) : '10:00')
     setShowRecallDialog(false); setLoading(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id])
 
   useEffect(() => {
@@ -103,19 +200,14 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
 
   useEffect(() => () => { if (advanceTimer.current) clearTimeout(advanceTimer.current) }, [])
 
-  function advanceOrClose() {
-    advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250)
-  }
+  function advanceOrClose() { advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250) }
 
-  // Separater Counter-Button - User tippt aktiv "Anruf zaehlen".
-  // tel:-Link ist davon entkoppelt, keine iOS-Anruf-Blockade moeglich.
   function handleCallClick() {
     const newCount = (lead.call_attempts ?? 0) + 1
     const now = new Date().toISOString()
     onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
     supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
-      .then(({ data }) => { if (data) onUpdate(data as Lead) })
-      .catch(() => {})
+      .then(({ data }) => { if (data) onUpdate(data as Lead) }).catch(() => {})
   }
 
   async function saveNote() {
@@ -129,81 +221,22 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     if (!apptDate) { toast.error('Bitte Datum eingeben'); return }
     setSavingDate(true)
     const dt = apptTime ? new Date(`${apptDate}T${apptTime}`).toISOString() : new Date(`${apptDate}T00:00`).toISOString()
-    const { data, error } = await supabase
-      .from('leads')
-      .update({ appointment_date: dt, teams_link: teamsLinkInput.trim() || null })
-      .eq('id', lead.id)
-      .select()
-      .single()
+    const { data, error } = await supabase.from('leads').update({ appointment_date: dt, teams_link: teamsLinkInput.trim() || null }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler'); setSavingDate(false); return }
     toast.success('Termin gespeichert'); onUpdate(data as Lead); setSavingDate(false)
   }
 
-  // E-Mail-Entwurf in Gmail oeffnen mit allen Daten vorgefuellt.
-  // Funktioniert sowohl im Browser (Gmail-Webmail) als auch im Gmail-App am Handy.
   function openEmailDraft() {
     if (!lead.email) { toast.error('Lead hat keine E-Mail-Adresse'); return }
     if (!lead.teams_link) { toast.error('Bitte Teams-Link eintragen und Termin speichern'); return }
     if (!lead.appointment_date) { toast.error('Bitte erst Termin speichern'); return }
-
-    // Nachname extrahieren: letztes Wort im Namen
-    const nameParts = (lead.name || '').trim().split(/\s+/).filter(p => p.length > 0)
-    const lastName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : lead.name || ''
-
-    const dateObj = new Date(lead.appointment_date)
-    const formattedDate = dateObj.toLocaleDateString('de-DE', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    })
-    const formattedTime = dateObj.toLocaleTimeString('de-DE', {
-      hour: '2-digit', minute: '2-digit'
-    })
-    const shortDate = dateObj.toLocaleDateString('de-DE')
-
-    // Signatur aus Setter-Profil bauen
-    const signature = buildEmailSignature({
-      full_name: setterProfile?.full_name || 'Ihr Berater',
-      role_title: setterProfile?.role_title || 'Hebammen-Beratungsteam',
-      phone_direct: setterProfile?.phone_direct || null,
-      custom_signature: setterProfile?.custom_signature || null,
-      use_custom_signature: setterProfile?.use_custom_signature || false,
-    })
-
-    const subject = `Bestätigung Ihres Beratungstermins am ${shortDate}`
-    const body = `Sehr geehrte Frau ${lastName},
-
-vielen Dank für unser nettes Telefongespräch und Ihr Interesse an einer Beratung zur Altersvorsorge & Vermögensaufbau speziell für Hebammen.
-
-Hiermit bestätige ich Ihnen Ihren persönlichen Termin:
-
-▸ Datum: ${formattedDate}
-▸ Uhrzeit: ${formattedTime} Uhr
-▸ Dauer: ca. 60 Minuten
-▸ Beratungsraum: ${lead.teams_link}
-
-Bitte klicken Sie wenige Minuten vor dem Termin auf den Microsoft Teams-Link. Eine Software-Installation ist nicht erforderlich – ein aktueller Browser genügt vollkommen.
-
-Sollten Sie verhindert sein oder einen anderen Termin benötigen, melden Sie sich gerne rechtzeitig bei uns.
-
-Ich freue mich auf unser Gespräch und wünsche Ihnen bis dahin alles Gute.
-
-Mit freundlichen Grüßen
-
-${signature}`
-
-    // mailto:-URL oeffnet das Standard-Mailprogramm (Apple Mail, Outlook, iOS Mail).
-    // Funktioniert geraeteuebergreifend, kein Gmail-Login noetig.
-    const mailtoUrl = `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.location.href = mailtoUrl
+    const { subject, body } = renderClusterEmail('email_confirmation', lead, setterProfile, cluster)
+    window.location.href = `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   }
 
   async function clearAppointment() {
     setSavingDate(true)
-    const { data, error } = await supabase
-      .from('leads')
-      .update({ appointment_date: null, teams_link: null })
-      .eq('id', lead.id)
-      .select()
-      .single()
+    const { data, error } = await supabase.from('leads').update({ appointment_date: null, teams_link: null }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler'); setSavingDate(false); return }
     toast.success('Termin entfernt'); setApptDate(''); setApptTime(''); setTeamsLinkInput(''); onUpdate(data as Lead); setSavingDate(false)
   }
@@ -221,17 +254,9 @@ ${signature}`
     const dt = new Date(`${recallDate}T${recallTime || '10:00'}`).toISOString()
     const { data, error } = await supabase.from('leads').update({ status: 'wiedervorlage', recall_date: dt }).eq('id', lead.id).select().single()
     if (error) { toast.error('Fehler: ' + error.message); setSavingRecall(false); return }
-    const { error: actErr } = await supabase.from('activity_log').insert({
-      lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: 'wiedervorlage',
-      note: `Wiedervorlage am ${new Date(dt).toLocaleString('de-DE')}`,
-    })
-    if (actErr) {
-      console.error('[activity_log] Insert fehlgeschlagen:', actErr)
-      toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
-    }
-    toast.success('Wiedervorlage geplant ⏰')
-    onUpdate(data as Lead); setShowRecallDialog(false); setSavingRecall(false)
-    advanceOrClose()
+    const { error: actErr } = await supabase.from('activity_log').insert({ lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: 'wiedervorlage', note: `Wiedervorlage am ${new Date(dt).toLocaleString('de-DE')}` })
+    if (actErr) { console.error('[activity_log]', actErr); toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message) }
+    toast.success('Wiedervorlage geplant ⏰'); onUpdate(data as Lead); setShowRecallDialog(false); setSavingRecall(false); advanceOrClose()
   }
 
   async function saveStatus(status: LeadStatus) {
@@ -241,106 +266,78 @@ ${signature}`
     try {
       const { data, error } = await supabase.from('leads').update({ status }).eq('id', lead.id).select().single()
       if (error) { toast.error('Fehler: ' + error.message); setLoading(null); return }
-      const { error: actErr } = await supabase.from('activity_log').insert({
-        lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: status, note: null,
-      })
-      if (actErr) {
-        console.error('[activity_log] Insert fehlgeschlagen:', actErr)
-        toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
-      }
-      toast.success('✓ ' + STATUS_CONFIG[status].label)
-      onUpdate(data as Lead); advanceOrClose()
+      const { error: actErr } = await supabase.from('activity_log').insert({ lead_id: lead.id, setter_id: userId, old_status: lead.status, new_status: status, note: null })
+      if (actErr) { console.error('[activity_log]', actErr); toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message) }
+      toast.success('✓ ' + STATUS_CONFIG[status].label); onUpdate(data as Lead); advanceOrClose()
     } catch (_) { toast.error('Fehler'); setLoading(null) }
   }
 
   const hasAppointment = !!(apptDate || lead.appointment_date)
   const callCount = lead.call_attempts ?? 0
-  const waTemplates = applicableTemplates(lead)
+  const berufLabel = getBeruf(lead) || 'Lead'
+  const website = getWebsite(lead)
+  const showWebsite = isRealWebsite(website)
+
+  // WhatsApp-Varianten: Termin-Vorlagen erscheinen sobald ein Termin gespeichert ist, No-Show immer
+  const waVariants = [
+    { key: 'wa_confirmation', emoji: '✅', label: 'Terminbestätigung', desc: 'Mit Datum, Uhrzeit & Teams-Link', show: !!lead.appointment_date },
+    { key: 'wa_reminder', emoji: '🔔', label: 'Erinnerung (Vortag)', desc: '1 Tag vor dem Termin', show: !!lead.appointment_date },
+    { key: 'wa_reminder_3h', emoji: '⏰', label: 'Erinnerung (kurz vorher)', desc: 'Wenige Stunden vor dem Termin', show: !!lead.appointment_date },
+    { key: 'wa_no_show', emoji: '📵', label: 'Nicht erschienen', desc: 'Neuen Termin anbieten', show: true },
+  ].filter(v => v.show)
 
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="hidden md:block flex-1 bg-black/40" onClick={onClose} />
 
-      <div className="w-full md:max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto"
-           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="w-full md:max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
         {/* HEADER */}
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center gap-2 bg-[#1E3A5F] sticky top-0 z-10"
-             style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}>
-          {onPrev && (
-            <button onClick={onPrev} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Vorheriger Lead">
-              <ChevronLeft className="w-5 h-5 text-white" />
-            </button>
-          )}
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center gap-2 bg-[#1E3A5F] sticky top-0 z-10" style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}>
+          {onPrev && <button onClick={onPrev} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Vorheriger Lead"><ChevronLeft className="w-5 h-5 text-white" /></button>}
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest">
-              Hebamme{position ? ` · ${position.current} / ${position.total}` : ''}
+              {berufLabel}{position ? ` · ${position.current} / ${position.total}` : ''}
             </p>
             <h2 className="font-bold text-xl text-white truncate">{lead.name}</h2>
           </div>
-          {onNext && (
-            <button onClick={onNext} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Nächster Lead">
-              <ChevronRight className="w-5 h-5 text-white" />
-            </button>
-          )}
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Schließen">
-            <X className="w-5 h-5 text-white" />
-          </button>
+          {onNext && <button onClick={onNext} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Nächster Lead"><ChevronRight className="w-5 h-5 text-white" /></button>}
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg active:bg-white/20 transition-colors" aria-label="Schließen"><X className="w-5 h-5 text-white" /></button>
         </div>
 
         {/* ANRUFEN + COUNTER */}
         <div className="px-5 py-3 border-b border-gray-100">
-          {/* NACKTER tel:-Link ohne onClick - iOS Safari kann das nicht als "automatischer Anruf" interpretieren */}
-          <a
-            href={`tel:${lead.phone}`}
-            className="flex items-center justify-center gap-3 w-full min-h-[52px] p-3.5 bg-[#2E75B6] text-white rounded-xl hover:bg-[#1E3A5F] active:scale-[0.98] transition-all font-semibold text-lg shadow-sm"
-          >
-            <Phone className="w-5 h-5" />
-            <span className="tracking-wide">+{lead.phone.replace(/^\+/, '')}</span>
+          <a href={`tel:${formatPhoneForCall(lead.phone)}`} className="flex items-center justify-center gap-3 w-full min-h-[52px] p-3.5 bg-[#2E75B6] text-white rounded-xl hover:bg-[#1E3A5F] active:scale-[0.98] transition-all font-semibold text-lg shadow-sm">
+            <Phone className="w-5 h-5" /><span className="tracking-wide">{formatPhoneForCall(lead.phone) || 'Keine Nummer'}</span>
           </a>
-          {/* Separater Log-Button - User entscheidet selbst wann gezaehlt wird */}
+          {showWebsite && (
+            <a href={websiteHref(website)} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-[#2E75B6] text-sm font-medium transition-colors">
+              <Globe className="w-4 h-4" /><span className="truncate max-w-[240px]">{websiteLabel(website)}</span>
+            </a>
+          )}
           <div className="mt-2 flex items-center justify-between gap-2">
             <p className="text-[11px] text-gray-500">
-              {callCount > 0 ? (
-                <>
-                  <span className="font-semibold text-gray-700">{callCount}×</span> angerufen
-                  {lead.last_call_attempt && <> · zuletzt {formatRelative(lead.last_call_attempt)}</>}
-                </>
-              ) : (
-                <span className="text-gray-400">Noch nicht angerufen</span>
-              )}
+              {callCount > 0 ? (<><span className="font-semibold text-gray-700">{callCount}×</span> angerufen{lead.last_call_attempt && <> · zuletzt {formatRelative(lead.last_call_attempt)}</>}</>) : (<span className="text-gray-400">Noch nicht angerufen</span>)}
             </p>
-            <button
-              type="button"
-              onClick={handleCallClick}
-              className="text-[11px] font-medium px-2.5 py-1 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 rounded-md transition-all whitespace-nowrap"
-            >
-              + Anruf zählen
-            </button>
+            <button type="button" onClick={handleCallClick} className="text-[11px] font-medium px-2.5 py-1 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 rounded-md transition-all whitespace-nowrap">+ Anruf zählen</button>
           </div>
         </div>
 
-        {/* WHATSAPP TEMPLATES */}
-        {waTemplates.length > 0 && (
+        {/* WHATSAPP */}
+        {waVariants.length > 0 && (
           <div className="px-5 py-3 border-b border-gray-100">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                <MessageCircle className="w-3 h-3 text-[#25D366]" />
-                WhatsApp
-              </p>
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5"><MessageCircle className="w-3 h-3 text-[#25D366]" />WhatsApp</p>
               <span className="text-[9px] text-gray-400 italic">Text wird vorbereitet</span>
             </div>
             <div className="space-y-1.5">
-              {waTemplates.map(t => (
-                <a key={t.id}
-                  href={buildWhatsappUrl(lead.phone, t.render(lead, setterName))}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {waVariants.map(v => (
+                <a key={v.key} href={buildWhatsappUrl(lead.phone, renderClusterWhatsapp(v.key, lead, setterProfile, cluster))} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-2.5 w-full min-h-[44px] px-3 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/40 hover:bg-[#25D366]/20 active:scale-[0.98] transition-all">
-                  <span className="text-lg shrink-0">{t.emoji}</span>
+                  <span className="text-lg shrink-0">{v.emoji}</span>
                   <span className="flex-1 text-left">
-                    <span className="block text-sm font-semibold text-[#075E54]">{t.label}</span>
-                    <span className="block text-[10px] text-gray-500">{t.description}</span>
+                    <span className="block text-sm font-semibold text-[#075E54]">{v.label}</span>
+                    <span className="block text-[10px] text-gray-500">{v.desc}</span>
                   </span>
                   <MessageCircle className="w-4 h-4 text-[#25D366] opacity-70 shrink-0" />
                 </a>
@@ -351,18 +348,9 @@ ${signature}`
 
         {/* INFO-GRID */}
         <div className="px-5 py-3 border-b border-gray-100 grid grid-cols-2 gap-x-4 gap-y-2">
-          <div>
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Bundesland</p>
-            <p className="text-sm font-semibold text-gray-900 truncate">{lead.state || '–'}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Alter</p>
-            <p className="text-sm font-semibold text-gray-900 truncate">{(lead.age_indicator || '–').replace(/[^a-zA-ZäöüÄÖÜß0-9 .,()-]/g, '').trim()}</p>
-          </div>
-          <div className="col-span-2">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">E-Mail</p>
-            <p className="text-sm font-semibold text-gray-900 break-all">{lead.email || '–'}</p>
-          </div>
+          <div><p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Bundesland</p><p className="text-sm font-semibold text-gray-900 truncate">{lead.state || '–'}</p></div>
+          <div><p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Ort</p><p className="text-sm font-semibold text-gray-900 truncate">{getOrt(lead) || '–'}</p></div>
+          <div className="col-span-2"><p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">E-Mail</p><p className="text-sm font-semibold text-gray-900 break-all">{lead.email || '–'}</p></div>
         </div>
 
         {/* WIEDERVORLAGE BANNER */}
@@ -370,10 +358,7 @@ ${signature}`
           <div className="px-5 py-3 border-b border-gray-100">
             <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-center gap-2">
               <Clock className="w-4 h-4 text-purple-700 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-purple-700">Wiedervorlage geplant</p>
-                <p className="text-xs text-purple-600 truncate">{new Date(lead.recall_date).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} Uhr</p>
-              </div>
+              <div className="flex-1 min-w-0"><p className="text-xs font-bold text-purple-700">Wiedervorlage geplant</p><p className="text-xs text-purple-600 truncate">{new Date(lead.recall_date).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} Uhr</p></div>
             </div>
           </div>
         )}
@@ -382,52 +367,20 @@ ${signature}`
         <div className="px-5 py-3 border-b border-gray-100">
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Terminzeit</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-700 mb-1">Datum</label>
-              <input type="date" value={apptDate} onChange={e => setApptDate(e.target.value)}
-                className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-700 mb-1">Uhrzeit</label>
-              <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
-                className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
-            </div>
+            <div><label className="block text-[11px] font-medium text-gray-700 mb-1">Datum</label><input type="date" value={apptDate} onChange={e => setApptDate(e.target.value)} className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" /></div>
+            <div><label className="block text-[11px] font-medium text-gray-700 mb-1">Uhrzeit</label><input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)} className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" /></div>
           </div>
           <div className="mb-2">
             <label className="block text-[11px] font-medium text-gray-700 mb-1">Microsoft Teams-Link</label>
-            <input
-              type="url"
-              inputMode="url"
-              placeholder="https://teams.microsoft.com/l/meetup-join/..."
-              value={teamsLinkInput}
-              onChange={e => setTeamsLinkInput(e.target.value)}
-              className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none"
-            />
+            <input type="url" inputMode="url" placeholder="https://teams.microsoft.com/l/meetup-join/..." value={teamsLinkInput} onChange={e => setTeamsLinkInput(e.target.value)} className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" />
           </div>
           <div className="flex gap-2">
-            <button onClick={saveAppointment} disabled={savingDate}
-              className="flex-1 min-h-[44px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">
-              {savingDate ? 'Speichern...' : 'Termin speichern'}
-            </button>
-            {hasAppointment && (
-              <button onClick={clearAppointment} disabled={savingDate}
-                className="min-h-[44px] px-3 rounded-xl bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 transition-colors disabled:opacity-50" aria-label="Termin entfernen">
-                <X className="w-4 h-4" />
-              </button>
-            )}
+            <button onClick={saveAppointment} disabled={savingDate} className="flex-1 min-h-[44px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">{savingDate ? 'Speichern...' : 'Termin speichern'}</button>
+            {hasAppointment && <button onClick={clearAppointment} disabled={savingDate} className="min-h-[44px] px-3 rounded-xl bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 transition-colors disabled:opacity-50" aria-label="Termin entfernen"><X className="w-4 h-4" /></button>}
           </div>
-          {/* E-MAIL VORBEREITEN - oeffnet Gmail mit vorgefuelltem Entwurf */}
           {lead.email && lead.teams_link && lead.appointment_date && (
-            <button
-              type="button"
-              onClick={openEmailDraft}
-              className="mt-2 w-full min-h-[44px] py-2 rounded-xl bg-[#2E75B6] hover:bg-[#1E3A5F] active:scale-[0.98] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"
-            >
-              <span>📧</span>
-              <span>Bestätigung per E-Mail vorbereiten</span>
-            </button>
+            <button type="button" onClick={openEmailDraft} className="mt-2 w-full min-h-[44px] py-2 rounded-xl bg-[#2E75B6] hover:bg-[#1E3A5F] active:scale-[0.98] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"><span>📧</span><span>Bestätigung per E-Mail vorbereiten</span></button>
           )}
-          {/* Hinweis warum Button noch nicht erscheint */}
           {(!lead.email || !lead.teams_link || !lead.appointment_date) && (lead.appointment_date || teamsLinkInput) && (
             <p className="mt-2 text-[11px] text-gray-500 leading-snug">
               {!lead.email && '⚠️ Lead hat keine E-Mail-Adresse'}
@@ -440,13 +393,8 @@ ${signature}`
         {/* NOTIZ */}
         <div className="px-5 py-3 border-b border-gray-100">
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Notiz</p>
-          <textarea value={notizText} onChange={e => setNotizText(e.target.value)} rows={3}
-            placeholder="Notizen zu diesem Lead..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none resize-none" />
-          <button onClick={saveNote} disabled={savingNote}
-            className="mt-2 w-full min-h-[44px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">
-            {savingNote ? 'Speichern...' : 'Notiz speichern'}
-          </button>
+          <textarea value={notizText} onChange={e => setNotizText(e.target.value)} rows={3} placeholder="Notizen zu diesem Lead..." className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none resize-none" />
+          <button onClick={saveNote} disabled={savingNote} className="mt-2 w-full min-h-[44px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">{savingNote ? 'Speichern...' : 'Notiz speichern'}</button>
         </div>
 
         {/* STATUS */}
@@ -461,10 +409,7 @@ ${signature}`
               const isCurrent = lead.status === s
               const isLoading = loading === s
               return (
-                <button key={s} onClick={() => saveStatus(s)} disabled={loading !== null}
-                  className={`w-full min-h-[52px] text-left px-4 py-3 rounded-xl border-2 transition-all font-semibold text-sm flex items-center gap-3 active:scale-[0.98] ${
-                    isCurrent ? `${cfg.bg} border-current` : 'bg-white border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50'
-                  } disabled:opacity-50`}>
+                <button key={s} onClick={() => saveStatus(s)} disabled={loading !== null} className={`w-full min-h-[52px] text-left px-4 py-3 rounded-xl border-2 transition-all font-semibold text-sm flex items-center gap-3 active:scale-[0.98] ${isCurrent ? `${cfg.bg} border-current` : 'bg-white border-gray-200 hover:border-[#2E75B6] text-gray-900 hover:bg-blue-50'} disabled:opacity-50`}>
                   <span className="text-xl shrink-0">{cfg.emoji}</span>
                   <span className="flex-1">{isLoading ? 'Wird gespeichert...' : cfg.label}</span>
                   {isCurrent && <span className="text-xs opacity-70">aktuell</span>}
@@ -472,53 +417,24 @@ ${signature}`
               )
             })}
           </div>
-
-          {onNext && (
-            <button onClick={onNext}
-              className="mt-3 w-full min-h-[44px] py-2.5 rounded-xl bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100 text-sm font-medium text-gray-600 transition-colors flex items-center justify-center gap-2">
-              <SkipForward className="w-4 h-4" />
-              Überspringen (→ nächster Lead)
-            </button>
-          )}
+          {onNext && <button onClick={onNext} className="mt-3 w-full min-h-[44px] py-2.5 rounded-xl bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100 text-sm font-medium text-gray-600 transition-colors flex items-center justify-center gap-2"><SkipForward className="w-4 h-4" />Überspringen (→ nächster Lead)</button>}
         </div>
       </div>
 
       {showRecallDialog && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-purple-600" />
-              <h3 className="font-bold text-lg text-[#1E3A5F]">Wiedervorlage planen</h3>
-            </div>
-            <p className="text-sm text-gray-700">Wann soll diese Hebamme erneut angerufen werden?</p>
+            <div className="flex items-center gap-2"><Clock className="w-5 h-5 text-purple-600" /><h3 className="font-bold text-lg text-[#1E3A5F]">Wiedervorlage planen</h3></div>
+            <p className="text-sm text-gray-700">Wann soll dieser Lead erneut angerufen werden?</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] font-medium text-gray-700 mb-1">Datum</label>
-                <input type="date" value={recallDate} onChange={e => setRecallDate(e.target.value)}
-                  className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-purple-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-gray-700 mb-1">Uhrzeit</label>
-                <input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)}
-                  className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-purple-500 focus:outline-none" />
-              </div>
+              <div><label className="block text-[11px] font-medium text-gray-700 mb-1">Datum</label><input type="date" value={recallDate} onChange={e => setRecallDate(e.target.value)} className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-purple-500 focus:outline-none" /></div>
+              <div><label className="block text-[11px] font-medium text-gray-700 mb-1">Uhrzeit</label><input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)} className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-purple-500 focus:outline-none" /></div>
             </div>
             <div className="flex gap-2">
-              <button onClick={saveRecall} disabled={savingRecall}
-                className="flex-1 min-h-[44px] bg-purple-600 text-white py-2.5 rounded-xl font-semibold text-sm hover:bg-purple-700 active:bg-purple-800 disabled:opacity-50">
-                {savingRecall ? 'Speichern...' : '⏰ Wiedervorlage planen'}
-              </button>
-              <button onClick={() => setShowRecallDialog(false)} disabled={savingRecall}
-                className="min-h-[44px] px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 active:bg-gray-300 disabled:opacity-50">
-                Abbrechen
-              </button>
+              <button onClick={saveRecall} disabled={savingRecall} className="flex-1 min-h-[44px] bg-purple-600 text-white py-2.5 rounded-xl font-semibold text-sm hover:bg-purple-700 active:bg-purple-800 disabled:opacity-50">{savingRecall ? 'Speichern...' : '⏰ Wiedervorlage planen'}</button>
+              <button onClick={() => setShowRecallDialog(false)} disabled={savingRecall} className="min-h-[44px] px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 active:bg-gray-300 disabled:opacity-50">Abbrechen</button>
             </div>
-            {lead.recall_date && (
-              <button onClick={clearRecall} disabled={savingRecall}
-                className="w-full text-xs text-red-600 hover:text-red-800 hover:underline disabled:opacity-50 mt-1">
-                Bestehende Wiedervorlage entfernen
-              </button>
-            )}
+            {lead.recall_date && <button onClick={clearRecall} disabled={savingRecall} className="w-full text-xs text-red-600 hover:text-red-800 hover:underline disabled:opacity-50 mt-1">Bestehende Wiedervorlage entfernen</button>}
           </div>
         </div>
       )}
