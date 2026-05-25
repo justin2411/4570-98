@@ -10,15 +10,21 @@ import { Lead } from '@/types'
 import { normalizeState } from '@/lib/normalize-state'
 import toast from 'react-hot-toast'
 
+// Rohzeile kann BEIDE Formate haben (altes Excel + neue CSV)
 interface RawRow {
+  // altes Format
   Name?: string; Telefon?: string | number; 'E-Mail'?: string;
   Bundesland?: string; Gesamt?: number | string; Lead?: string;
   Alter?: string; Signale?: string
+  // neues Format
+  ansprechpartner?: string; handynummer?: string | number; email?: string;
+  bundesland?: string; beruf?: string; website?: string; ort?: string
 }
 
 interface ParsedLead {
   name: string; phone: string; email: string; state: string; original_state: string;
-  score: number; lead_quality: string; age_indicator: string; signals: string; isDuplicate?: boolean
+  score: number; lead_quality: string; age_indicator: string; signals: string;
+  beruf: string; website: string; ort: string; isDuplicate?: boolean
 }
 
 interface Setter { id: string; full_name: string }
@@ -30,6 +36,22 @@ interface Props {
   onImported: (leads: Lead[]) => void
 }
 
+// Hilfsfunktion: Wert aus mehreren möglichen Spaltennamen holen (case-insensitive)
+function pick(row: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    // exakt
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return String(row[k]).trim()
+  }
+  // case-insensitive Fallback
+  const lowerMap: Record<string, unknown> = {}
+  for (const rk of Object.keys(row)) lowerMap[rk.toLowerCase().trim()] = row[rk]
+  for (const k of keys) {
+    const v = lowerMap[k.toLowerCase().trim()]
+    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim()
+  }
+  return ''
+}
+
 export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
   const supabase = createClient()
   const [step, setStep] = useState<'upload' | 'preview' | 'assign'>('upload')
@@ -38,44 +60,64 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
   const [assignMode, setAssignMode] = useState<'auto' | 'setter'>('auto')
   const [selectedSetter, setSelectedSetter] = useState('')
   const [_importedLeads, setImportedLeads] = useState<Lead[]>([])
-  // NEU: Listenname für diesen Import
   const [listName, setListName] = useState('')
 
   const onDrop = useCallback(async (files: File[]) => {
     const file = files[0]
     if (!file) return
     const ab = await file.arrayBuffer()
-    const wb = XLSX.read(ab)
+    const wb = XLSX.read(ab, { codepage: 65001 }) // UTF-8 für Umlaute
     const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows: RawRow[] = XLSX.utils.sheet_to_json(ws)
+    const rows: RawRow[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
 
     const { data: existing } = await supabase.from('leads').select('phone, email, name')
     const existingPhones = new Set((existing ?? []).map(r => String(r.phone)))
     const existingEmails = new Set((existing ?? []).filter(r => r.email).map(r => String(r.email).toLowerCase()))
     const existingNames = new Set((existing ?? []).map(r => String(r.name).toLowerCase()))
 
-    const leads: ParsedLead[] = rows.filter(r => r.Name && r.Telefon).map(r => {
-      const phone = String(r.Telefon ?? '').trim()
-      const rawState = String(r.Bundesland ?? '').trim()
+    const leads: ParsedLead[] = rows.map(r => {
+      const row = r as Record<string, unknown>
+      // Felder aus altem ODER neuem Format ziehen
+      const name = pick(row, ['ansprechpartner', 'Name', 'name'])
+      const phone = pick(row, ['handynummer', 'Telefon', 'telefon', 'phone'])
+      const email = pick(row, ['email', 'E-Mail', 'e-mail', 'Email'])
+      const rawState = pick(row, ['bundesland', 'Bundesland'])
+      const beruf = pick(row, ['beruf', 'Beruf'])
+      const website = pick(row, ['website', 'Website', 'webseite', 'url'])
+      const ort = pick(row, ['ort', 'Ort', 'stadt', 'Stadt'])
       const normalized = normalizeState(rawState)
       return {
-        name: String(r.Name ?? '').trim(),
+        name,
         phone,
-        email: String(r['E-Mail'] ?? '').trim(),
+        email,
         state: normalized || rawState,
         original_state: rawState,
-        score: parseFloat(String(r.Gesamt ?? '0')),
-        lead_quality: String(r.Lead ?? '').trim(),
-        age_indicator: String(r.Alter ?? '').trim(),
-        signals: String(r.Signale ?? '').trim(),
-        isDuplicate: existingPhones.has(phone) || (r['E-Mail'] && existingEmails.has(String(r['E-Mail'] ?? '').trim().toLowerCase())) || existingNames.has(String(r.Name ?? '').trim().toLowerCase()),
+        score: parseFloat(pick(row, ['Gesamt', 'gesamt', 'score']) || '0') || 0,
+        lead_quality: pick(row, ['Lead', 'lead_quality']),
+        age_indicator: pick(row, ['Alter', 'alter']),
+        signals: pick(row, ['Signale', 'signale']),
+        beruf,
+        website,
+        ort,
+        isDuplicate: existingPhones.has(phone)
+          || (!!email && existingEmails.has(email.toLowerCase()))
+          || (!!name && existingNames.has(name.toLowerCase())),
       }
-    })
+    }).filter(l => l.name && l.phone) // nur Zeilen mit Name + Telefon
+
     setParsed(leads)
     setStep('preview')
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], 'application/vnd.ms-excel': ['.xls'], 'text/csv': ['.csv'] }, maxFiles: 1 })
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/csv': ['.csv'],
+    },
+    maxFiles: 1,
+  })
 
   async function handleImport() {
     setLoading(true)
@@ -113,7 +155,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="font-bold text-lg text-[#1E3A5F]">Excel hochladen</h2>
+          <h2 className="font-bold text-lg text-[#1E3A5F]">Leads hochladen</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-500" /></button>
         </div>
 
@@ -125,8 +167,9 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
               <p className="font-medium text-gray-700">Excel- oder CSV-Datei hier ablegen</p>
               <p className="text-sm text-gray-500 mt-1">oder klicken zum Auswählen (.xlsx, .xls, .csv)</p>
               <div className="mt-4 text-xs text-gray-400 space-y-1">
-                <p>Erwartete Spalten: Name, Telefon, E-Mail, Bundesland, Gesamt, Lead, Alter, Signale</p>
-                <p className="text-[#2E75B6]">Bundesländer werden automatisch normalisiert (z.B. „BaWü" → „Baden-Württemberg")</p>
+                <p>Erkennt: beruf, bundesland, ansprechpartner, email, handynummer, website, ort</p>
+                <p>oder das alte Format: Name, Telefon, E-Mail, Bundesland, Gesamt, Lead, Alter, Signale</p>
+                <p className="text-[#2E75B6]">Bundesländer werden automatisch normalisiert</p>
               </div>
             </div>
           )}
@@ -146,7 +189,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
                   type="text"
                   value={listName}
                   onChange={e => setListName(e.target.value)}
-                  placeholder="z.B. Hebammen, Physio Q3 …"
+                  placeholder="z.B. Heilpraktiker, Physio Q3 …"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
                 />
                 <p className="mt-1.5 text-xs text-gray-500">
@@ -158,7 +201,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['Name', 'Telefon', 'Bundesland', 'Score', 'Lead', 'Status'].map(h => (
+                      {['Name', 'Beruf', 'Telefon', 'Ort', 'Bundesland', 'Status'].map(h => (
                         <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500">{h}</th>
                       ))}
                     </tr>
@@ -167,15 +210,15 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
                     {parsed.slice(0, 10).map((l, i) => (
                       <tr key={i} className={l.isDuplicate ? 'bg-orange-50 opacity-60' : ''}>
                         <td className="px-3 py-2">{l.name}</td>
+                        <td className="px-3 py-2">{l.beruf}</td>
                         <td className="px-3 py-2">{l.phone}</td>
+                        <td className="px-3 py-2">{l.ort}</td>
                         <td className="px-3 py-2">
                           {l.state}
                           {l.original_state && l.original_state !== l.state && (
                             <span className="text-[10px] text-gray-400 ml-1">({l.original_state})</span>
                           )}
                         </td>
-                        <td className="px-3 py-2">{l.score}</td>
-                        <td className="px-3 py-2">{l.lead_quality}</td>
                         <td className="px-3 py-2">{l.isDuplicate ? '⚠️ Duplikat' : '✅ Neu'}</td>
                       </tr>
                     ))}
