@@ -47,7 +47,7 @@ export const SCRIPT_SECTIONS: ScriptSection[] = [
     id: 'hook',
     emoji: '🤝',
     title: 'Hook & Kooperation',
-    content: 'Ganz kurz, damit Sie mich einordnen: Wir arbeiten bundesweit mit {beruf_plural} zusammen und unterstützen sie rund um das Thema Altersvorsorge. In {bundesland} sind Sie eine davon.',
+    content: 'Ganz kurz, damit Sie mich einordnen: Wir arbeiten mit selbstständigen {beruf_plural} in {bundesland} zusammen. In diesem Rahmen unterstützen wir {beruf_plural} — Sie sind eine davon.',
   },
   {
     id: 'problem',
