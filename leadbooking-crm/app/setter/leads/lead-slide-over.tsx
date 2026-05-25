@@ -188,6 +188,14 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
+  // Teams-Link automatisch aus Profil vorbefüllen, sobald geladen (wenn Feld leer & Lead noch keinen Link hat)
+  useEffect(() => {
+    if (!lead.teams_link && setterProfile?.teams_room_url && !teamsLinkInput.trim()) {
+      setTeamsLinkInput(setterProfile.teams_room_url)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setterProfile, lead.id])
+
   // Cluster-Inhalte zum Lead laden (anhand list_name)
   useEffect(() => {
     const ln = getListName(lead)
