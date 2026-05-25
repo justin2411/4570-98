@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus } from '@/types'
 import { LeadSlideOver } from './lead-slide-over'
 import { Search, X, Phone } from 'lucide-react'
+import { formatPhoneForCall } from '@/lib/phone'
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
@@ -113,7 +114,7 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
             <div className="flex items-center justify-between gap-3 mb-2">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-bold text-gray-900 text-[15px] truncate">{lead.name}</span>
-                <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">Hebamme</span>
+                {((lead as any).beruf || '').trim() && <span className="shrink-0 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">{(lead as any).beruf}</span>}
                 {(lead.call_attempts ?? 0) > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200 px-1.5 py-0.5 rounded-full" title="Anrufversuche">
                     <Phone className="w-2.5 h-2.5" />
@@ -124,7 +125,7 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
               <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_COLORS[lead.status]}`}>{STATUS_LABELS[lead.status]}</span>
             </div>
             <div className="flex items-center gap-3 text-sm mb-1">
-              <span className="font-semibold text-gray-900">+{lead.phone.replace(/^\+/, '')}</span>
+              <span className="font-semibold text-gray-900">{formatPhoneForCall(lead.phone)}</span>
               {lead.age_indicator && <span className="text-gray-500 text-xs">{(lead.age_indicator || "").replace(/[^a-zA-ZäöüÄÖÜß0-9 .,()-]/g, "").trim()}</span>}
               {lead.state && <span className="text-gray-500 text-xs">{lead.state}</span>}
             </div>
