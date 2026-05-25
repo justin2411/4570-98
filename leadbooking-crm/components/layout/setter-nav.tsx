@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Calendar, Clock, LogOut, Trophy, Settings, Zap } from 'lucide-react'
+import { LayoutDashboard, Users, Calendar, Clock, LogOut, Settings, Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from './logo'
 import { cn } from '@/lib/utils'
@@ -13,7 +13,6 @@ const links = [
   { href: '/setter/leads', label: 'Meine Leads', shortLabel: 'Leads', icon: Users },
   { href: '/setter/wiedervorlage', label: 'Wiedervorlagen', shortLabel: 'Wiedervorl.', icon: Clock },
   { href: '/setter/termine', label: 'Meine Termine', shortLabel: 'Termine', icon: Calendar },
-  { href: '/rangliste', label: 'Rangliste', shortLabel: 'Rangliste', icon: Trophy },
 ]
 
 function getPageTitle(pathname: string): string {
@@ -135,7 +134,7 @@ export function SetterNav() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="grid grid-cols-5 h-16">
-          {/* Mobile zeigt: Home, Cockpit (highlight), Leads, Termine, Rangliste — Wiedervorlage über Leads erreichbar */}
+          {/* Mobile zeigt: Home, Cockpit (highlight), Leads, Termine — Wiedervorlage über Leads erreichbar */}
           {[links[0], links[1], links[2], links[4], links[5]].map(({ href, shortLabel, icon: Icon, highlight }) => {
             const active = isActive(href)
             return (
