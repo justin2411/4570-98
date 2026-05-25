@@ -27,5 +27,11 @@ export default async function AdminLeadsPage() {
   const { data: setters } = await supabase
     .from('profiles').select('id, full_name, avatar_color').eq('role', 'setter').eq('is_active', true).order('full_name')
 
-  return <AdminLeadsClient initialLeads={allLeads as never[]} setters={setters ?? []} adminId={user.id} />
+  // Welche Cluster sind "fertig"? = cluster_content mit Branding (firma) UND Skript gefüllt
+  const { data: cc } = await supabase.from('cluster_content').select('list_name, firma, script')
+  const readyClusters = (cc ?? [])
+    .filter((c: { firma?: string; script?: string }) => (c.firma || '').trim() !== '' && (c.script || '').trim() !== '')
+    .map((c: { list_name: string }) => c.list_name)
+
+  return <AdminLeadsClient initialLeads={allLeads as never[]} setters={setters ?? []} adminId={user.id} readyClusters={readyClusters} />
 }

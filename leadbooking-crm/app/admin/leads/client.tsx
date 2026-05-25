@@ -8,25 +8,19 @@ import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
 import { FixStatesModal } from './fix-states-modal'
 import { Button } from '@/components/ui/button'
-import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen, Briefcase, Tag } from 'lucide-react'
+import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen, Briefcase, Tag, AlertTriangle } from 'lucide-react'
 
 interface Setter { id: string; full_name: string; avatar_color: string }
-interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string }
+interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string; readyClusters?: string[] }
 
 const VALID_STATUSES = new Set<LeadStatus>([
   'neu', 'angerufen', 'nicht_erreicht', 'wiedervorlage',
   'termin_gelegt', 'termin_stattgefunden', 'kein_interesse',
 ])
 
-function isArchived(l: Lead): boolean {
-  return (l as any).archived === true
-}
-function getListName(l: Lead): string {
-  return ((l as any).list_name || '').trim()
-}
-function getBeruf(l: Lead): string {
-  return ((l as any).beruf || '').trim()
-}
+function isArchived(l: Lead): boolean { return (l as any).archived === true }
+function getListName(l: Lead): string { return ((l as any).list_name || '').trim() }
+function getBeruf(l: Lead): string { return ((l as any).beruf || '').trim() }
 
 function matchesSearch(lead: Lead, q: string): boolean {
   const qt = q.trim().toLowerCase()
@@ -39,7 +33,7 @@ function matchesSearch(lead: Lead, q: string): boolean {
   return false
 }
 
-export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
+export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters = [] }: Props) {
   const supabase = createClient()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [showUpload, setShowUpload] = useState(false)
@@ -47,6 +41,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState<string[]>([])
   const [listTarget, setListTarget] = useState<string[]>([])
+  const [assignWarn, setAssignWarn] = useState<{ ids: string[]; missing: { name: string; count: number }[] } | null>(null)
   const [activeTab, setActiveTab] = useState<string>('unassigned')
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
   const [search, setSearch] = useState('')
@@ -56,6 +51,8 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [listFilter, setListFilter] = useState<string>('alle')
   const [berufFilter, setBerufFilter] = useState<string>('alle')
 
+  const readySet = useMemo(() => new Set(readyClusters), [readyClusters])
+
   useEffect(() => {
     const ch = supabase.channel('admin-leads-realtime')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, (payload) => {
@@ -64,23 +61,17 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         setLastUpdate(new Date())
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, (payload) => {
-        const newLead = payload.new as Lead
-        setLeads(prev => [newLead, ...prev])
-        setLastUpdate(new Date())
+        setLeads(prev => [payload.new as Lead, ...prev]); setLastUpdate(new Date())
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'leads' }, (payload) => {
         const oldLead = payload.old as Partial<Lead>
-        if (oldLead.id) {
-          setLeads(prev => prev.filter(l => l.id !== oldLead.id))
-          setLastUpdate(new Date())
-        }
+        if (oldLead.id) { setLeads(prev => prev.filter(l => l.id !== oldLead.id)); setLastUpdate(new Date()) }
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Ebene 1: Listen ───────────────────────────────────────
   const allLists = useMemo(() => {
     const set = new Set<string>()
     leads.forEach(l => { const ln = getListName(l); if (ln) set.add(ln) })
@@ -94,19 +85,14 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     return leads.filter(l => getListName(l) === listFilter)
   }, [leads, listFilter])
 
-  // ── Ebene 2: Aktiv / Archiv ───────────────────────────────
   const activeCount = listScopedLeads.filter(l => !isArchived(l)).length
   const archivedCount = listScopedLeads.filter(l => isArchived(l)).length
   const viewScopedLeads = listScopedLeads.filter(l => viewMode === 'archived' ? isArchived(l) : !isArchived(l))
 
-  // ── Ebene 3: Beruf (automatisch aus Daten) ────────────────
   const allBerufe = useMemo(() => {
     const map = new Map<string, number>()
-    viewScopedLeads.forEach(l => {
-      const b = getBeruf(l)
-      if (b) map.set(b, (map.get(b) || 0) + 1)
-    })
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]) // nach Anzahl
+    viewScopedLeads.forEach(l => { const b = getBeruf(l); if (b) map.set(b, (map.get(b) || 0) + 1) })
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
   }, [viewScopedLeads])
   const hasNoBeruf = useMemo(() => viewScopedLeads.some(l => !getBeruf(l)), [viewScopedLeads])
 
@@ -116,7 +102,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     return viewScopedLeads.filter(l => getBeruf(l) === berufFilter)
   }, [viewScopedLeads, berufFilter])
 
-  // ── Ebene 4: Setter-Tabs ──────────────────────────────────
   const unassigned = berufScopedLeads.filter(l => !l.assigned_to)
   const adminLeads = berufScopedLeads.filter(l => l.assigned_to === adminId)
   const tabs = [
@@ -141,10 +126,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   function resetLower() { setActiveTab('unassigned'); setSelected(new Set()); setStatusFilter('alle') }
 
   async function refreshLeads() {
-    const { data } = await supabase
-      .from('leads')
-      .select('*, profiles!leads_assigned_to_fkey(full_name, avatar_color)')
-      .order('created_at', { ascending: false })
+    const { data } = await supabase.from('leads').select('*, profiles!leads_assigned_to_fkey(full_name, avatar_color)').order('created_at', { ascending: false })
     if (data) { setLeads(data as never as Lead[]); setLastUpdate(new Date()) }
   }
 
@@ -168,8 +150,22 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     setBusy(false)
     if (error) { window.alert('Fehler: ' + error.message); return }
     setLeads(prev => prev.map(l => ids.includes(l.id) ? ({ ...l, list_name: clean } as any) : l))
-    setSelected(new Set())
-    setListTarget([])
+    setSelected(new Set()); setListTarget([])
+  }
+
+  // ── Sicherheitsprüfung beim Zuweisen ──────────────────────
+  function requestAssign(ids: string[]) {
+    const counts = new Map<string, number>()
+    ids.forEach(id => {
+      const lead = leads.find(l => l.id === id)
+      const c = lead ? getListName(lead) : ''
+      counts.set(c, (counts.get(c) || 0) + 1)
+    })
+    const missing = Array.from(counts.entries())
+      .filter(([c]) => !readySet.has(c))
+      .map(([name, count]) => ({ name, count }))
+    if (missing.length > 0) setAssignWarn({ ids, missing })
+    else setAssignTarget(ids)
   }
 
   const selectedArr = Array.from(selected)
@@ -194,19 +190,13 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
 
           {selected.size > 0 && (
             <>
-              <button
-                onClick={() => setListTarget(selectedArr)}
-                disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm font-semibold disabled:opacity-50"
-              >
-                <Tag className="w-4 h-4" />
-                {selected.size} zu Liste
+              <button onClick={() => setListTarget(selectedArr)} disabled={busy}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm font-semibold disabled:opacity-50">
+                <Tag className="w-4 h-4" />{selected.size} zu Liste
               </button>
               {viewMode === 'active' && (
                 <>
-                  <Button variant="secondary" onClick={() => setAssignTarget(selectedArr)}>
-                    {selected.size} zuweisen
-                  </Button>
+                  <Button variant="secondary" onClick={() => requestAssign(selectedArr)}>{selected.size} zuweisen</Button>
                   <button onClick={() => setArchived(selectedArr, true)} disabled={busy}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-800 text-sm font-semibold disabled:opacity-50">
                     <Archive className="w-4 h-4" />{selected.size} archivieren
@@ -222,14 +212,11 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
             </>
           )}
 
-          <Button variant="secondary" onClick={() => setShowFixStates(true)}>
-            <Wand2 className="w-4 h-4" />Bundesländer reparieren
-          </Button>
+          <Button variant="secondary" onClick={() => setShowFixStates(true)}><Wand2 className="w-4 h-4" />Bundesländer reparieren</Button>
           <Button onClick={() => setShowUpload(true)}><Upload className="w-4 h-4" />Hochladen</Button>
         </div>
       </div>
 
-      {/* Listen-Ebene */}
       {(allLists.length > 0 || hasUnlisted) && (
         <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E3A5F] uppercase tracking-wide px-1 self-center">
@@ -241,8 +228,9 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
           </button>
           {allLists.map(name => (
             <button key={name} onClick={() => { setListFilter(name); setBerufFilter('alle'); resetLower() }}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
               {name} ({leads.filter(l => getListName(l) === name).length})
+              {!readySet.has(name) && <span title="Kein Skript hinterlegt" className={listFilter === name ? 'text-amber-300' : 'text-amber-500'}>⚠</span>}
             </button>
           ))}
           {hasUnlisted && (
@@ -254,17 +242,14 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         </div>
       )}
 
-      {/* Aktiv / Archiv */}
       <div className="flex gap-2">
         <button onClick={() => { setViewMode('active'); setBerufFilter('alle'); resetLower() }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'active' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-          Aktive Leads
-          <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'active' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{activeCount}</span>
+          Aktive Leads<span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'active' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{activeCount}</span>
         </button>
         <button onClick={() => { setViewMode('archived'); setBerufFilter('alle'); resetLower() }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'archived' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-          <Archive className="w-4 h-4" />Archiv
-          <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'archived' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{archivedCount}</span>
+          <Archive className="w-4 h-4" />Archiv<span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'archived' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{archivedCount}</span>
         </button>
       </div>
 
@@ -274,7 +259,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         </div>
       )}
 
-      {/* Beruf-Ebene (automatisch aus Daten) */}
       {allBerufe.length > 0 && (
         <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-xl border border-teal-100">
           <div className="flex items-center gap-1.5 text-xs font-bold text-teal-800 uppercase tracking-wide px-1 self-center">
@@ -321,8 +305,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         {tabs.map(t => (
           <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(new Set()); setStatusFilter('alle') }}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === t.id ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
-            {t.label}
-            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === t.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>{t.count}</span>
+            {t.label}<span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === t.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>{t.count}</span>
           </button>
         ))}
       </div>
@@ -356,7 +339,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
                 <StatusBadge status={lead.status} />
                 {viewMode === 'active' ? (
                   <>
-                    <button onClick={() => setAssignTarget([lead.id])} className="text-xs text-[#2E75B6] hover:underline font-medium">Zuweisen</button>
+                    <button onClick={() => requestAssign([lead.id])} className="text-xs text-[#2E75B6] hover:underline font-medium">Zuweisen</button>
                     <button onClick={() => setArchived([lead.id], true)} disabled={busy} className="flex items-center gap-1 text-xs text-orange-600 hover:underline font-medium disabled:opacity-50">
                       <Archive className="w-3 h-3" />Archivieren
                     </button>
@@ -377,11 +360,8 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
               {lead.state && <span>· {lead.state}</span>}
               {(lead as any).website && (
                 <a href={(lead as any).website.startsWith('http') ? (lead as any).website : `https://${(lead as any).website}`}
-                   target="_blank" rel="noopener noreferrer"
-                   onClick={e => e.stopPropagation()}
-                   className="text-[#2E75B6] hover:underline truncate max-w-[200px]">
-                  🌐 Website
-                </a>
+                   target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                   className="text-[#2E75B6] hover:underline">🌐 Website</a>
               )}
             </div>
           </div>
@@ -397,20 +377,16 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
       {showFixStates && <FixStatesModal onClose={() => setShowFixStates(false)} onApplied={() => { setShowFixStates(false); window.location.reload() }} />}
       {assignTarget.length > 0 && <AssignModal leadIds={assignTarget} allLeads={leads} setters={setters} adminId={adminId} adminName="Admin" onClose={() => setAssignTarget([])} onAssigned={(leadIds, setterId) => { setLeads(prev => prev.map(l => leadIds.includes(l.id) ? { ...l, assigned_to: setterId } : l)); setAssignTarget([]); setSelected(new Set()) }} />}
       {listTarget.length > 0 && <AssignListModal count={listTarget.length} existingLists={allLists} busy={busy} onClose={() => setListTarget([])} onAssign={(name) => assignToList(listTarget, name)} />}
+      {assignWarn && <AssignWarningModal missing={assignWarn.missing} onClose={() => setAssignWarn(null)} onConfirm={() => { const ids = assignWarn.ids; setAssignWarn(null); setAssignTarget(ids) }} />}
     </div>
   )
 }
 
 // ============== LISTEN-ZUWEISUNGS-MODAL ==============
 function AssignListModal({ count, existingLists, busy, onClose, onAssign }: {
-  count: number
-  existingLists: string[]
-  busy: boolean
-  onClose: () => void
-  onAssign: (listName: string) => void
+  count: number; existingLists: string[]; busy: boolean; onClose: () => void; onAssign: (listName: string) => void
 }) {
   const [newName, setNewName] = useState('')
-
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -418,38 +394,82 @@ function AssignListModal({ count, existingLists, busy, onClose, onAssign }: {
           <h2 className="text-lg font-bold text-[#1E3A5F]">📋 {count} Leads zu Liste</h2>
           <button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button>
         </div>
-
         <label className="block text-xs font-semibold text-gray-700 mb-1">Neue Liste erstellen</label>
         <div className="flex gap-2 mb-4">
-          <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="z.B. Gesundheit"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none"
-            autoFocus />
+          <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="z.B. Gesundheit"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:outline-none" autoFocus />
           <button onClick={() => newName.trim() && onAssign(newName)} disabled={busy || !newName.trim()}
-            className="px-4 py-2 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white text-sm font-semibold disabled:opacity-50">
-            Hinzufügen
-          </button>
+            className="px-4 py-2 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white text-sm font-semibold disabled:opacity-50">Hinzufügen</button>
         </div>
-
         {existingLists.length > 0 && (
           <>
             <label className="block text-xs font-semibold text-gray-700 mb-2">Oder bestehende Liste wählen</label>
             <div className="flex flex-wrap gap-2 mb-4">
               {existingLists.map(name => (
                 <button key={name} onClick={() => onAssign(name)} disabled={busy}
-                  className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 disabled:opacity-50">
-                  {name}
-                </button>
+                  className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 disabled:opacity-50">{name}</button>
               ))}
             </div>
           </>
         )}
-
         <div className="border-t border-gray-100 pt-3">
-          <button onClick={() => onAssign('')} disabled={busy}
-            className="text-xs text-gray-500 hover:text-red-600 hover:underline disabled:opacity-50">
+          <button onClick={() => onAssign('')} disabled={busy} className="text-xs text-gray-500 hover:text-red-600 hover:underline disabled:opacity-50">
             Aus Liste entfernen (ohne Liste)
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============== ZUWEISUNGS-WARNUNG (fehlendes Skript) ==============
+function AssignWarningModal({ missing, onClose, onConfirm }: {
+  missing: { name: string; count: number }[]; onClose: () => void; onConfirm: () => void
+}) {
+  const [confirmText, setConfirmText] = useState('')
+  const ok = confirmText.trim().toUpperCase() === 'BESTÄTIGEN'
+  const totalMissing = missing.reduce((s, m) => s + m.count, 0)
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+          </div>
+          <h2 className="text-lg font-bold text-[#1E3A5F]">Achtung — fehlendes Skript</h2>
+        </div>
+
+        <p className="text-sm text-gray-700 mb-3">
+          {totalMissing} der ausgewählten Leads gehören zu Clustern, für die noch <strong>kein Branding + Skript</strong> hinterlegt ist. Die Setter hätten dann keinen Gesprächsleitfaden:
+        </p>
+
+        <ul className="mb-4 space-y-1.5">
+          {missing.map(m => (
+            <li key={m.name} className="flex items-center justify-between text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <span className="font-semibold text-amber-900">{m.name || 'Ohne Cluster/Liste'}</span>
+              <span className="text-amber-700 text-xs">{m.count} {m.count === 1 ? 'Lead' : 'Leads'}</span>
+            </li>
+          ))}
+        </ul>
+
+        <a href="/admin/inhalte" className="block w-full text-center py-2.5 mb-4 rounded-lg bg-[#2E75B6] hover:bg-[#246299] text-white text-sm font-semibold">
+          → Jetzt Skript anlegen (Inhalte)
+        </a>
+
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs text-gray-600 mb-2">
+            Oder tippe <strong className="text-gray-900">BESTÄTIGEN</strong>, um trotzdem zuzuweisen:
+          </p>
+          <input type="text" value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="BESTÄTIGEN"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-amber-400 focus:outline-none mb-3" autoFocus />
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium">Abbrechen</button>
+            <button onClick={onConfirm} disabled={!ok}
+              className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold disabled:opacity-40">
+              Trotzdem zuweisen
+            </button>
+          </div>
         </div>
       </div>
     </div>
