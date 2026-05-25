@@ -2,6 +2,7 @@ import { Lead, Profile } from '@/types'
 import { buildEmailSignature } from './email-signature'
 import { resolveBeruf, resolveFirma } from './script-template'
 import { cleanLeadName } from './clean-name'
+import { formatPhoneForCall } from './phone'
 
 // ============================================================
 // TEMPLATE-DEFINITIONEN
@@ -365,7 +366,9 @@ export function renderEmail(
 }
 
 export function buildWhatsappUrl(phone: string, text: string): string {
-  const cleanPhone = (phone || '').replace(/\D/g, '')
+  // Robuste Normalisierung ins internationale Format, dann nur Ziffern für wa.me.
+  // Behebt u.a. "0151…" (nationale 0) und "+49 0151…" (49 + überzählige 0).
+  const cleanPhone = formatPhoneForCall(phone).replace(/\D/g, '')
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
 }
 
