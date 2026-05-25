@@ -10,12 +10,43 @@ export default async function CockpitPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Setter-Profil laden
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const now = new Date().toISOString()
+
+  // Alle Lade-Queries parallel (statt nacheinander) → schnellerer Cockpit-Start.
+  const [
+    { data: profile },
+    { data: clusterContent },
+    { data: wiedervorlagen },
+    { data: neueLeads },
+    { data: nichtErreicht },
+  ] = await Promise.all([
+    // Setter-Profil
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    // Cluster-Content (Skript/Branding/Templates pro Liste)
+    supabase.from('cluster_content').select('*'),
+    // 1) Fällige Wiedervorlagen
+    supabase.from('leads').select('*')
+      .eq('assigned_to', user.id)
+      .eq('status', 'wiedervorlage')
+      .lte('recall_date', now)
+      .order('recall_date', { ascending: true })
+      .limit(100),
+    // 2) Frische Leads (neu + angerufen) — nie angerufene zuerst, dann nach Score
+    supabase.from('leads').select('*')
+      .eq('assigned_to', user.id)
+      .in('status', ['neu', 'angerufen'])
+      .order('call_attempts', { ascending: true, nullsFirst: true })
+      .order('score', { ascending: false })
+      .limit(100),
+    // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen
+    supabase.from('leads').select('*')
+      .eq('assigned_to', user.id)
+      .eq('status', 'nicht_erreicht')
+      .or(`recall_date.is.null,recall_date.lte.${now}`)
+      .order('call_attempts', { ascending: true, nullsFirst: true })
+      .order('last_call_attempt', { ascending: true, nullsFirst: true })
+      .limit(100),
+  ])
 
   if (!profile) {
     return (
@@ -24,42 +55,6 @@ export default async function CockpitPage() {
       </div>
     )
   }
-
-  // Cluster-Content laden (Skript/Branding/Templates pro Liste)
-  const { data: clusterContent } = await supabase.from('cluster_content').select('*')
-
-  const now = new Date().toISOString()
-
-  // 1) Fällige Wiedervorlagen
-  const { data: wiedervorlagen } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('assigned_to', user.id)
-    .eq('status', 'wiedervorlage')
-    .lte('recall_date', now)
-    .order('recall_date', { ascending: true })
-    .limit(100)
-
-  // 2) Frische Leads (neu + angerufen)
-  const { data: neueLeads } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('assigned_to', user.id)
-    .in('status', ['neu', 'angerufen'])
-    .order('score', { ascending: false })
-    .order('call_attempts', { ascending: true, nullsFirst: true })
-    .limit(100)
-
-  // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen
-  const { data: nichtErreicht } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('assigned_to', user.id)
-    .eq('status', 'nicht_erreicht')
-    .or(`recall_date.is.null,recall_date.lte.${now}`)
-    .order('call_attempts', { ascending: true, nullsFirst: true })
-    .order('last_call_attempt', { ascending: true, nullsFirst: true })
-    .limit(100)
 
   const seen = new Set<string>()
   const deck: Lead[] = []

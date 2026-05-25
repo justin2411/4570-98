@@ -296,6 +296,12 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     }
   }
 
+  function goBack() {
+    if (currentIdx <= 0) return
+    setDragOffset({ x: 0, y: 0 }); setDragging(false); setDrawer('closed'); setActionModal(null)
+    setCurrentIdx(i => Math.max(0, i - 1))
+  }
+
   async function logActivity(leadId: string, newStatus: string, note?: string) {
     const { error } = await supabase.from('activity_log').insert({
       lead_id: leadId, setter_id: setter.id, old_status: currentLead?.status || '', new_status: newStatus, note: note || null,
@@ -371,7 +377,10 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
   return (
     <div className={"min-h-screen transition-colors " + (dark ? "bg-gradient-to-br from-gray-900 to-slate-800" : "bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]")} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex items-center justify-between px-4 py-3 text-white">
-        <button onClick={() => router.push('/setter')} className="p-2 -ml-2 rounded-lg active:bg-white/10" aria-label="Cockpit schließen"><X className="w-6 h-6" /></button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => router.push('/setter')} className="p-2 -ml-2 rounded-lg active:bg-white/10" aria-label="Cockpit schließen"><X className="w-6 h-6" /></button>
+          <button onClick={goBack} disabled={currentIdx === 0} className="p-2 rounded-lg active:bg-white/10 disabled:opacity-30 disabled:pointer-events-none" aria-label="Vorheriger Lead"><ChevronLeft className="w-6 h-6" /></button>
+        </div>
         <div className="text-center text-xs">
           <div className="text-white/70">Lead</div>
           <div className="text-sm font-bold">{currentIdx + 1} / {deck.length}</div>

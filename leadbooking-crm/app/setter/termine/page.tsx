@@ -10,19 +10,15 @@ export default async function TerminePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  // Lade ALLE Termine mit Status 'termin_gelegt' — auch ohne Datum oder in der Vergangenheit
-  const { data: leads } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('assigned_to', user.id)
-    .eq('status', 'termin_gelegt')
-    .order('appointment_date', { ascending: true, nullsFirst: true })
+  // Profil + Termine parallel laden
+  const [{ data: profile }, { data: leads }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    // ALLE Termine mit Status 'termin_gelegt' — auch ohne Datum oder in der Vergangenheit
+    supabase.from('leads').select('*')
+      .eq('assigned_to', user.id)
+      .eq('status', 'termin_gelegt')
+      .order('appointment_date', { ascending: true, nullsFirst: true }),
+  ])
 
   return (
     <TermineClient
