@@ -317,7 +317,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     { key: 'wa_confirmation', emoji: '✅', label: 'Terminbestätigung', desc: 'Mit Datum, Uhrzeit & Teams-Link', show: !!lead.appointment_date },
     { key: 'wa_reminder', emoji: '🔔', label: 'Erinnerung (Vortag)', desc: '1 Tag vor dem Termin', show: !!lead.appointment_date },
     { key: 'wa_reminder_3h', emoji: '⏰', label: 'Erinnerung (kurz vorher)', desc: 'Wenige Stunden vor dem Termin', show: !!lead.appointment_date },
-    { key: 'wa_no_show', emoji: '📵', label: 'Nicht erschienen', desc: 'Neuen Termin anbieten', show: true },
+    { key: 'wa_no_show', emoji: '📵', label: 'Nicht erschienen', desc: 'Neuen Termin anbieten', show: !!lead.appointment_date },
   ].filter(v => v.show)
 
   return (
