@@ -8,7 +8,7 @@ import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, 
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import { SCRIPT_SECTIONS, OBJECTIONS } from '@/lib/script-template'
-import { renderEmail, renderWhatsapp, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
+import { EMAIL_TEMPLATES, WHATSAPP_TEMPLATES, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import { CloserNotify } from '@/components/closer-notify'
 import toast from 'react-hot-toast'
 
@@ -81,10 +81,12 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
   const kundeVorname = nameParts[0] || kundeVoll
 
   let terminDatum = '[Datum]'
+  let terminKurz = '[Datum]'
   let terminUhrzeit = '[Uhrzeit]'
   if (lead.appointment_date) {
     const d = new Date(lead.appointment_date)
-    terminDatum = d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
+    terminDatum = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    terminKurz = d.toLocaleDateString('de-DE')
     terminUhrzeit = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
   }
 
@@ -103,9 +105,52 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
     .replaceAll('{beruf}', beruf)
     .replaceAll('{email}', lead.email || '[E-Mail]')
     .replaceAll('{termin_datum}', terminDatum)
+    .replaceAll('{termin_kurzdatum}', terminKurz)
     .replaceAll('{termin_uhrzeit}', terminUhrzeit)
+    .replaceAll('{teams_link}', lead.teams_link || '[Teams-Link]')
     .replaceAll('{firma}', firma)
     .replaceAll('{web}', cluster?.web || '')
+}
+
+// Cluster-spezifische Mail-Signatur (firma/web/kontakt aus Cluster, Fallback Hebammen)
+function buildClusterSignature(setter: Partial<Profile>, cluster: ClusterContent | null): string {
+  if (setter.use_custom_signature && setter.custom_signature?.trim()) {
+    return setter.custom_signature.trim()
+  }
+  const name = setter.full_name || 'Ihr Berater'
+  const role = setter.role_title || `${cluster?.firma || 'Hebammen-Vorsorge'}-Beratungsteam`
+  const phone = setter.phone_direct?.trim()
+  const firma = (cluster?.firma?.trim() || 'Hebammen-Vorsorge').toUpperCase()
+  const web = cluster?.web?.trim() || 'www.hebammen-vorsorge.de'
+  const email = cluster?.kontakt_email?.trim() || 'beratung@hebammen-vorsorge.de'
+  const tagline = cluster?.tagline?.trim() || 'Altersvorsorge & Vermögensaufbau'
+
+  let sig = `${name}\n${role}`
+  if (phone) sig += `\nTel: ${phone}`
+  sig += `\n\n\n────────────────────────────────────────\n\n   ${firma}\n   ${tagline}\n\n   E-Mail:   ${email}\n   Web:      ${web}\n\n────────────────────────────────────────`
+  return sig
+}
+
+// WhatsApp-Text aus Cluster (Fallback global), Platzhalter ersetzt
+function renderClusterWhatsapp(templateId: string, lead: Lead, setter: Partial<Profile>, cluster: ClusterContent | null): string {
+  const fromCluster = cluster?.templates?.[templateId]?.text
+  const def = WHATSAPP_TEMPLATES.find(t => t.id === templateId)?.defaultText || ''
+  const text = (fromCluster && fromCluster.trim()) ? fromCluster : def
+  return renderClusterText(text, lead, setter, cluster)
+}
+
+// E-Mail (Betreff + Body) aus Cluster (Fallback global), Signatur + Platzhalter ersetzt
+function renderClusterEmail(templateId: string, lead: Lead, setter: Partial<Profile>, cluster: ClusterContent | null): { subject: string; body: string } {
+  const def = EMAIL_TEMPLATES.find(t => t.id === templateId)
+  const fromCluster = cluster?.templates?.[templateId]
+  const subjT = (fromCluster?.subject && fromCluster.subject.trim()) ? fromCluster.subject : (def?.defaultSubject || '')
+  let bodyT = (fromCluster?.body && fromCluster.body.trim()) ? fromCluster.body : (def?.defaultBody || '')
+  // Signatur zuerst einsetzen, dann restliche Platzhalter
+  bodyT = bodyT.replaceAll('{signature}', buildClusterSignature(setter, cluster))
+  return {
+    subject: renderClusterText(subjT, lead, setter, cluster),
+    body: renderClusterText(bodyT, lead, setter, cluster),
+  }
 }
 
 function statusBadgeClass(status: string): string {
@@ -406,7 +451,6 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
                 <span className="text-gray-300">·</span>
                 <span className="font-medium text-teal-700">{berufLabel}</span>
               </div>
-              {/* E-Mail */}
               {currentLead.email ? (
                 <div className="mt-1.5 text-xs text-gray-500 flex items-center justify-center gap-1">
                   <span>📧</span><span className="truncate max-w-[200px]">{currentLead.email}</span>
@@ -427,7 +471,6 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
             <Phone className="w-6 h-6" />{formattedPhone || 'Keine Nummer'}
           </a>
 
-          {/* Website-Zeile unter der Telefonnummer — nur wenn echte Adresse */}
           {showWebsite && (
             <a href={websiteHref(website)} target="_blank" rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
@@ -820,7 +863,7 @@ function WiedervorlageModal({ onClose, onDone }: { onClose: () => void; onDone: 
   )
 }
 
-// ============== POST-TERMIN MODAL (Mail + WhatsApp) ==============
+// ============== POST-TERMIN MODAL (Mail + WhatsApp aus Cluster) ==============
 function PostTerminModal({ lead, setter, cluster, onContinue, onEditEmail }: { lead: Lead; setter: Profile; cluster: ClusterContent | null; onContinue: () => void; onEditEmail: () => void }) {
   const [mailSent, setMailSent] = useState(false)
   const [waSent, setWaSent] = useState(false)
@@ -832,12 +875,12 @@ function PostTerminModal({ lead, setter, cluster, onContinue, onEditEmail }: { l
 
   function openMail() {
     if (!lead.appointment_date || !lead.email) { toast.error('Termin oder E-Mail fehlt'); return }
-    const { subject, body } = renderEmail('email_confirmation', lead, setter)
+    const { subject, body } = renderClusterEmail('email_confirmation', lead, setter, cluster)
     window.location.href = buildMailtoUrl(lead.email, subject, body); setMailSent(true)
   }
   function openWhatsapp() {
     if (!confirmTpl) { toast.error('Kein WhatsApp-Template verfügbar'); return }
-    const text = renderWhatsapp(confirmTpl.id, lead, setter)
+    const text = renderClusterWhatsapp(confirmTpl.id, lead, setter, cluster)
     window.open(buildWhatsappUrl(lead.phone, text), '_blank'); setWaSent(true)
   }
 
