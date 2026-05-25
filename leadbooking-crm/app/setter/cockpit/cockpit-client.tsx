@@ -51,8 +51,8 @@ function getOrt(lead: Lead): string { return ((lead as any).ort || '').trim() }
 function getWebsite(lead: Lead): string { return ((lead as any).website || '').trim() }
 function getListName(lead: Lead): string { return ((lead as any).list_name || '').trim() }
 
-// Fallback-Skript (altes Hebammen-Skript als durchgehender Text mit ##-Überschriften)
-const FALLBACK_SCRIPT = SCRIPT_SECTIONS.map(s => `## ${s.title}\n${s.content}`).join('\n\n')
+// Zentrales Standard-Skript als durchgehender Text mit ##-Überschriften (gilt für alle Cluster)
+const SCRIPT_TEXT = SCRIPT_SECTIONS.map(s => `## ${s.title}\n${s.content}`).join('\n\n')
 
 // Skript-Fließtext in Abschnitte zerlegen (## Titel = Überschrift)
 function parseScriptSections(script: string): { title: string | null; body: string }[] {
@@ -714,16 +714,10 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
 }
 
 function ScriptView({ lead, setter, cluster }: { lead: Lead; setter: Profile; cluster: ClusterContent | null }) {
-  const scriptRaw = (cluster?.script?.trim()) ? cluster.script : FALLBACK_SCRIPT
-  const rendered = renderClusterText(scriptRaw, lead, setter, cluster)
+  const rendered = renderClusterText(SCRIPT_TEXT, lead, setter, cluster)
   const sections = parseScriptSections(rendered)
   return (
     <div className="space-y-5">
-      {!cluster && (
-        <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
-          ⚠️ Für diesen Lead ist kein Cluster-Skript hinterlegt — es wird die Standard-Vorlage angezeigt.
-        </div>
-      )}
       {sections.map((s, i) => (
         <div key={i}>
           {s.title && <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{s.title}</h4>}

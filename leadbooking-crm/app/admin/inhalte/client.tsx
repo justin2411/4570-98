@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SCRIPT_SECTIONS } from '@/lib/script-template'
 import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, PLACEHOLDERS } from '@/lib/message-templates'
-import { Save, Upload, ChevronDown, ChevronRight, FolderOpen, Megaphone, MessageCircle, Mail, BookOpen, Info } from 'lucide-react'
+import { Save, ChevronDown, ChevronRight, FolderOpen, Megaphone, MessageCircle, Mail, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface ClusterRow {
@@ -22,13 +21,9 @@ interface FormState {
   web: string
   kontakt_email: string
   tagline: string
-  script: string
   wa: Record<string, string>
   email: Record<string, { subject: string; body: string }>
 }
-
-// Standard-Skript als Fließtext-Vorlage (aus den bestehenden Abschnitten)
-const DEFAULT_SCRIPT = SCRIPT_SECTIONS.map(s => `## ${s.title}\n${s.content}`).join('\n\n')
 
 export function InhalteClient({ clusters, initialContent }: { clusters: string[]; initialContent: ClusterRow[] }) {
   const supabase = createClient()
@@ -43,7 +38,7 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
   const [selected, setSelected] = useState<string>(clusters[0] || '')
   const [saving, setSaving] = useState(false)
   const [showShortcodes, setShowShortcodes] = useState(false)
-  const [openSection, setOpenSection] = useState<'branding' | 'script' | 'whatsapp' | 'email'>('branding')
+  const [openSection, setOpenSection] = useState<'branding' | 'whatsapp' | 'email'>('branding')
 
   function buildForm(cluster: string): FormState {
     const existing = contentMap[cluster]
@@ -53,7 +48,6 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
       web: existing?.web || '',
       kontakt_email: existing?.kontakt_email || '',
       tagline: existing?.tagline || '',
-      script: existing?.script || DEFAULT_SCRIPT,
       wa: Object.fromEntries(WHATSAPP_TEMPLATES.map(w => [w.id, t[w.id]?.text ?? w.defaultText])),
       email: Object.fromEntries(EMAIL_TEMPLATES.map(e => [e.id, {
         subject: t[e.id]?.subject ?? e.defaultSubject,
@@ -72,15 +66,6 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
     setForm(f => ({ ...f, email: { ...f.email, [id]: { ...f.email[id], [field]: v } } }))
   }
 
-  function onScriptFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => { setField('script', String(reader.result || '')); toast.success('Skript aus Datei geladen') }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
   async function save() {
     if (!selected) return
     setSaving(true)
@@ -94,7 +79,6 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
       web: form.web.trim(),
       kontakt_email: form.kontakt_email.trim(),
       tagline: form.tagline.trim(),
-      script: form.script,
       templates,
     }
     const { error } = await supabase.from('cluster_content').upsert(payload as never, { onConflict: 'list_name' })
@@ -122,7 +106,6 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
 
   const sectionTabs = [
     { id: 'branding' as const, label: 'Branding', icon: Megaphone },
-    { id: 'script' as const, label: 'Skript', icon: BookOpen },
     { id: 'whatsapp' as const, label: 'WhatsApp', icon: MessageCircle },
     { id: 'email' as const, label: 'E-Mails', icon: Mail },
   ]
@@ -131,7 +114,7 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
     <div className="space-y-4 max-w-4xl pb-28">
       <div>
         <h1 className="text-2xl font-bold text-[#1E3A5F]">Inhalte pro Cluster</h1>
-        <p className="text-gray-700 text-sm mt-1">Skript, WhatsApp, E-Mails & Branding — individuell pro Zielgruppe.</p>
+        <p className="text-gray-700 text-sm mt-1">WhatsApp, E-Mails & Branding — individuell pro Zielgruppe. Das Gesprächs-Skript ist zentral und für alle Cluster gleich.</p>
       </div>
 
       {/* Cluster-Auswahl */}
@@ -152,7 +135,7 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
       {!isSaved && (
         <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800 flex items-start gap-2">
           <Info className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>Dieser Cluster hat noch keinen eigenen Content. Skript & Nachrichten sind mit der <strong>Standard-Vorlage</strong> vorausgefüllt — passe sie für „{selected}" an und speichere.</span>
+          <span>Dieser Cluster hat noch keinen eigenen Content. Die Nachrichten sind mit der <strong>Standard-Vorlage</strong> vorausgefüllt — passe sie für „{selected}" an und speichere.</span>
         </div>
       )}
 
@@ -202,23 +185,6 @@ export function InhalteClient({ clusters, initialContent }: { clusters: string[]
             <Field label="Kontakt-E-Mail" value={form.kontakt_email} onChange={v => setField('kontakt_email', v)} placeholder="z.B. beratung@therapeuten-vorsorge.de" />
             <Field label="Tagline" value={form.tagline} onChange={v => setField('tagline', v)} placeholder="z.B. Altersvorsorge für Therapeuten" />
           </div>
-        </div>
-      )}
-
-      {/* ─── SKRIPT ─── */}
-      {openSection === 'script' && (
-        <div className="space-y-3 bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="font-bold text-[#1E3A5F] flex items-center gap-2"><BookOpen className="w-4 h-4" /> Gesprächs-Skript</h2>
-            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer">
-              <Upload className="w-3.5 h-3.5" /> .txt hochladen
-              <input type="file" accept=".txt,text/plain" onChange={onScriptFile} className="hidden" />
-            </label>
-          </div>
-          <p className="text-xs text-gray-500">Durchgehender Text mit Shortcodes. Die Setter sehen ihn im Cockpit.</p>
-          <textarea value={form.script} onChange={e => setField('script', e.target.value)} rows={20}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 font-mono leading-relaxed focus:ring-2 focus:ring-[#2E75B6] focus:outline-none"
-            placeholder="Skripttext mit Shortcodes…" />
         </div>
       )}
 
