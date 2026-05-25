@@ -8,7 +8,7 @@ import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
 import { FixStatesModal } from './fix-states-modal'
 import { Button } from '@/components/ui/button'
-import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore } from 'lucide-react'
+import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen } from 'lucide-react'
 
 interface Setter { id: string; full_name: string; avatar_color: string }
 interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string }
@@ -18,9 +18,12 @@ const VALID_STATUSES = new Set<LeadStatus>([
   'termin_gelegt', 'termin_stattgefunden', 'kein_interesse',
 ])
 
-// Defensiv: archived-Feld lesen, auch wenn der Lead-Type es (noch) nicht kennt
+// Defensiv: archived / list_name lesen, auch wenn der Lead-Type sie (noch) nicht kennt
 function isArchived(l: Lead): boolean {
   return (l as any).archived === true
+}
+function getListName(l: Lead): string {
+  return ((l as any).list_name || '').trim()
 }
 
 function matchesSearch(lead: Lead, q: string): boolean {
@@ -45,11 +48,11 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
   const [search, setSearch] = useState('')
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
-  // NEU: Aktiv- vs. Archiv-Ansicht
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active')
   const [busy, setBusy] = useState(false)
+  // NEU: Listen-Filter (oberste Ebene)
+  const [listFilter, setListFilter] = useState<string>('alle')
 
-  // Realtime: Lead-Änderungen sofort übernehmen, damit Filter aktuelle Status zeigt
   useEffect(() => {
     const ch = supabase.channel('admin-leads-realtime')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, (payload) => {
@@ -74,13 +77,29 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Anzahl insgesamt für die Umschalter-Badges
-  const activeCount = leads.filter(l => !isArchived(l)).length
-  const archivedCount = leads.filter(l => isArchived(l)).length
+  // Alle vorhandenen Listen-Namen einsammeln
+  const allLists = useMemo(() => {
+    const set = new Set<string>()
+    leads.forEach(l => { const ln = getListName(l); if (ln) set.add(ln) })
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'de'))
+  }, [leads])
+  const hasUnlisted = useMemo(() => leads.some(l => !getListName(l)), [leads])
 
-  // Erst nach Aktiv/Archiv filtern, dann läuft alles andere darauf
-  const scopedLeads = leads.filter(l => viewMode === 'archived' ? isArchived(l) : !isArchived(l))
+  // 1) nach Liste filtern
+  const listScopedLeads = useMemo(() => {
+    if (listFilter === 'alle') return leads
+    if (listFilter === '__none__') return leads.filter(l => !getListName(l))
+    return leads.filter(l => getListName(l) === listFilter)
+  }, [leads, listFilter])
 
+  // Aktiv/Archiv-Zähler innerhalb der gewählten Liste
+  const activeCount = listScopedLeads.filter(l => !isArchived(l)).length
+  const archivedCount = listScopedLeads.filter(l => isArchived(l)).length
+
+  // 2) nach Aktiv/Archiv filtern
+  const scopedLeads = listScopedLeads.filter(l => viewMode === 'archived' ? isArchived(l) : !isArchived(l))
+
+  // 3) nach Setter-Tab
   const unassigned = scopedLeads.filter(l => !l.assigned_to)
   const adminLeads = scopedLeads.filter(l => l.assigned_to === adminId)
   const tabs = [
@@ -117,7 +136,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
     }
   }
 
-  // ─── Archivieren / Reaktivieren ──────────────────────────────
   async function setArchived(ids: string[], archived: boolean) {
     if (ids.length === 0 || busy) return
     const verb = archived ? 'archivieren' : 'reaktivieren'
@@ -141,6 +159,10 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
 
   const selectedArr = Array.from(selected)
 
+  function resetToFirstTab() {
+    setActiveTab('unassigned'); setSelected(new Set()); setStatusFilter('alle')
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -148,6 +170,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
           <h1 className="text-2xl font-bold text-[#1E3A5F]">Leads verwalten</h1>
           <p className="text-gray-700 text-sm mt-1">
             {activeCount} aktiv · {archivedCount} archiviert
+            {listFilter !== 'alle' && <span className="text-gray-400"> · Liste „{listFilter === '__none__' ? 'Ohne Liste' : listFilter}"</span>}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -157,7 +180,6 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
           </button>
           <button onClick={selectAllInFiltered} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 hover:bg-gray-50">Alle sichtbaren ({filtered.length})</button>
 
-          {/* Bulk-Aktionen je nach Modus */}
           {selected.size > 0 && viewMode === 'active' && (
             <>
               <Button variant="secondary" onClick={() => setAssignTarget(selectedArr)}>
@@ -191,17 +213,52 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
         </div>
       </div>
 
+      {/* Listen-Ebene (oberste Gruppierung) — nur zeigen wenn Listen existieren */}
+      {allLists.length > 0 && (
+        <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E3A5F] uppercase tracking-wide px-1 self-center">
+            <FolderOpen className="w-4 h-4" /> Listen
+          </div>
+          <button
+            onClick={() => { setListFilter('alle'); resetToFirstTab() }}
+            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}
+          >
+            Alle Listen ({leads.length})
+          </button>
+          {allLists.map(name => {
+            const count = leads.filter(l => getListName(l) === name).length
+            return (
+              <button
+                key={name}
+                onClick={() => { setListFilter(name); resetToFirstTab() }}
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}
+              >
+                {name} ({count})
+              </button>
+            )
+          })}
+          {hasUnlisted && (
+            <button
+              onClick={() => { setListFilter('__none__'); resetToFirstTab() }}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === '__none__' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+            >
+              Ohne Liste ({leads.filter(l => !getListName(l)).length})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Aktiv / Archiv Umschalter */}
       <div className="flex gap-2">
         <button
-          onClick={() => { setViewMode('active'); setActiveTab('unassigned'); setSelected(new Set()); setStatusFilter('alle') }}
+          onClick={() => { setViewMode('active'); resetToFirstTab() }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'active' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
         >
           Aktive Leads
           <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'active' ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>{activeCount}</span>
         </button>
         <button
-          onClick={() => { setViewMode('archived'); setActiveTab('unassigned'); setSelected(new Set()); setStatusFilter('alle') }}
+          onClick={() => { setViewMode('archived'); resetToFirstTab() }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${viewMode === 'archived' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
         >
           <Archive className="w-4 h-4" />
@@ -278,6 +335,9 @@ export function AdminLeadsClient({ initialLeads, setters, adminId }: Props) {
               <div className="flex items-center gap-2 mb-1">
                 <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="mr-1" />
                 <span className="font-bold text-gray-900 text-[15px]">{lead.name}</span>
+                {getListName(lead) && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{getListName(lead)}</span>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <StatusBadge status={lead.status} />

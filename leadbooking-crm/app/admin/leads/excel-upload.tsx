@@ -38,6 +38,8 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
   const [assignMode, setAssignMode] = useState<'auto' | 'setter'>('auto')
   const [selectedSetter, setSelectedSetter] = useState('')
   const [_importedLeads, setImportedLeads] = useState<Lead[]>([])
+  // NEU: Listenname für diesen Import
+  const [listName, setListName] = useState('')
 
   const onDrop = useCallback(async (files: File[]) => {
     const file = files[0]
@@ -60,7 +62,6 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
         name: String(r.Name ?? '').trim(),
         phone,
         email: String(r['E-Mail'] ?? '').trim(),
-        // Normalisiert speichern, Fallback aufs Original wenn nicht erkannt
         state: normalized || rawState,
         original_state: rawState,
         score: parseFloat(String(r.Gesamt ?? '0')),
@@ -81,14 +82,17 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     const newLeads = parsed.filter(l => !l.isDuplicate)
     if (newLeads.length === 0) { toast.error('Keine neuen Leads zum Importieren.'); setLoading(false); return }
 
+    const trimmedList = listName.trim()
+
     const toInsert = newLeads.map(({ isDuplicate: _dup, original_state: _orig, ...l }) => ({
       ...l, status: 'neu', uploaded_by: adminId, assigned_to: adminId,
+      list_name: trimmedList,
     }))
 
     const BATCH = 500
     for (let i = 0; i < toInsert.length; i += BATCH) {
       const batch = toInsert.slice(i, i + BATCH)
-      const { error } = await supabase.from('leads').upsert(batch, { onConflict: 'phone', ignoreDuplicates: true })
+      const { error } = await supabase.from('leads').upsert(batch as any, { onConflict: 'phone', ignoreDuplicates: true })
       if (error) {
         toast.error('Fehler bei Batch ' + (Math.floor(i/BATCH)+1) + ': ' + error.message)
         setLoading(false)
@@ -96,7 +100,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
       }
     }
 
-    toast.success(toInsert.length + ' Leads importiert und dir zugewiesen!')
+    toast.success(toInsert.length + ' Leads importiert' + (trimmedList ? ` (Liste „${trimmedList}")` : '') + '!')
     setLoading(false)
     window.location.reload()
   }
@@ -133,6 +137,21 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
                 <div className="flex items-center gap-2 text-green-600 text-sm"><CheckCircle className="w-4 h-4" />{newCount} neue Leads</div>
                 {dupCount > 0 && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertTriangle className="w-4 h-4" />{dupCount} Duplikate (übersprungen)</div>}
                 {normalizedCount > 0 && <div className="flex items-center gap-2 text-purple-600 text-sm">🧹 {normalizedCount} Bundesländer normalisiert</div>}
+              </div>
+
+              {/* Listen-Feld */}
+              <div className="border border-blue-200 bg-blue-50/50 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-[#1E3A5F] mb-1">📋 Liste (optional)</label>
+                <input
+                  type="text"
+                  value={listName}
+                  onChange={e => setListName(e.target.value)}
+                  placeholder="z.B. Hebammen, Physio Q3 …"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none"
+                />
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Alle Leads aus diesem Import landen in dieser Liste. Leer lassen = ohne Liste.
+                </p>
               </div>
 
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
