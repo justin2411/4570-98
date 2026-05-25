@@ -25,13 +25,9 @@ export default async function CockpitPage() {
     )
   }
 
-  // ───────────────────────────────────────────────────────────────
-  // Smart-Deck Reihenfolge:
-  //   1) Fällige Wiedervorlagen (explizite Zusagen — immer zuerst)
-  //   2) Neue/angerufene Leads (frischeste Erfolgschance)
-  //   3) Nicht erreicht — NUR wenn recall_date abgelaufen ist
-  //      (mit wenigsten Versuchen zuerst — "tote" Leads landen hinten)
-  // ───────────────────────────────────────────────────────────────
+  // Cluster-Content laden (Skript/Branding/Templates pro Liste)
+  const { data: clusterContent } = await supabase.from('cluster_content').select('*')
+
   const now = new Date().toISOString()
 
   // 1) Fällige Wiedervorlagen
@@ -44,8 +40,7 @@ export default async function CockpitPage() {
     .order('recall_date', { ascending: true })
     .limit(100)
 
-  // 2) Frische Leads (neu + angerufen) — hochwertige zuerst,
-  //    bei Gleichstand: wenig Versuche zuerst
+  // 2) Frische Leads (neu + angerufen)
   const { data: neueLeads } = await supabase
     .from('leads')
     .select('*')
@@ -55,8 +50,7 @@ export default async function CockpitPage() {
     .order('call_attempts', { ascending: true, nullsFirst: true })
     .limit(100)
 
-  // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen ist
-  //    Sortiert nach: wenig Versuche zuerst, dann älteste zuletzt versucht
+  // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen
   const { data: nichtErreicht } = await supabase
     .from('leads')
     .select('*')
@@ -67,7 +61,6 @@ export default async function CockpitPage() {
     .order('last_call_attempt', { ascending: true, nullsFirst: true })
     .limit(100)
 
-  // Zusammen-Deck: Wiedervorlagen → neue Leads → nicht_erreicht (hinten!)
   const seen = new Set<string>()
   const deck: Lead[] = []
   for (const list of [wiedervorlagen, neueLeads, nichtErreicht]) {
@@ -79,5 +72,5 @@ export default async function CockpitPage() {
     }
   }
 
-  return <CockpitClient initialDeck={deck} setter={profile as Profile} />
+  return <CockpitClient initialDeck={deck} setter={profile as Profile} clusterContent={(clusterContent ?? []) as never[]} />
 }
