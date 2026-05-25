@@ -22,6 +22,12 @@ const VALID_STATUSES = new Set<LeadStatus>([
 function isArchived(l: Lead): boolean { return (l as any).archived === true }
 function getListName(l: Lead): string { return ((l as any).list_name || '').trim() }
 function getBeruf(l: Lead): string { return ((l as any).beruf || '').trim() }
+function isHandy(l: Lead): boolean {
+  let d = (l.phone || '').replace(/\D/g, '')
+  if (d.startsWith('0049')) d = d.slice(4); else if (d.startsWith('49')) d = d.slice(2)
+  if (!d.startsWith('0')) d = '0' + d
+  return /^01(5|6|7)/.test(d)
+}
 function isPrioA(l: Lead): boolean { return (l as any).prio_a === true }
 
 function matchesSearch(lead: Lead, q: string): boolean {
@@ -53,6 +59,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
   const [listFilter, setListFilter] = useState<string>('alle')
   const [berufFilter, setBerufFilter] = useState<string>('alle')
   const [prioFilter, setPrioFilter] = useState(false)
+  const [handyFilter, setHandyFilter] = useState(false)
 
   const readySet = useMemo(() => new Set(readyClusters), [readyClusters])
 
@@ -106,15 +113,16 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
   }, [viewScopedLeads, berufFilter])
 
   const prioScopedLeads = prioFilter ? berufScopedLeads.filter(isPrioA) : berufScopedLeads
-  const unassigned = prioScopedLeads.filter(l => !l.assigned_to)
-  const adminLeads = prioScopedLeads.filter(l => l.assigned_to === adminId)
+  const handyScopedLeads = handyFilter ? prioScopedLeads.filter(isHandy) : prioScopedLeads
+  const unassigned = handyScopedLeads.filter(l => !l.assigned_to)
+  const adminLeads = handyScopedLeads.filter(l => l.assigned_to === adminId)
   const tabs = [
     { id: 'unassigned', label: 'Nicht zugeteilt', count: unassigned.length },
     { id: adminId, label: 'Admin (meine)', count: adminLeads.length },
-    ...setters.map(s => ({ id: s.id, label: s.full_name, count: prioScopedLeads.filter(l => l.assigned_to === s.id).length })),
+    ...setters.map(s => ({ id: s.id, label: s.full_name, count: handyScopedLeads.filter(l => l.assigned_to === s.id).length })),
   ]
 
-  const tabLeads = activeTab === 'unassigned' ? unassigned : prioScopedLeads.filter(l => l.assigned_to === activeTab)
+  const tabLeads = activeTab === 'unassigned' ? unassigned : handyScopedLeads.filter(l => l.assigned_to === activeTab)
   const searched = useMemo(() => tabLeads.filter(l => matchesSearch(l, search)), [tabLeads, search])
 
   const filtered = useMemo(() => {
@@ -267,6 +275,10 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
         <button onClick={() => setPrioFilter(p => !p)}
           className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${prioFilter ? 'bg-amber-500 text-white' : 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-50'}`}>
           ⭐ Nur A-Leads{prioFilter ? ' (aktiv)' : ''}
+        </button>
+        <button onClick={() => setHandyFilter(h => !h)}
+          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${handyFilter ? 'bg-[#2E75B6] text-white' : 'bg-white border border-blue-300 text-[#2E75B6] hover:bg-blue-50'}`}>
+          📱 Nur Handynummern{handyFilter ? ' (aktiv)' : ''}
         </button>
         {prioFilter && <span className="text-xs text-gray-500 self-center">Quer über alle Cluster · nur für dich (Admin) sichtbar</span>}
       </div>
