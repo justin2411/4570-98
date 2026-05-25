@@ -7,7 +7,7 @@ import { Lead, Profile } from '@/types'
 import { X, Phone, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, BookOpen, MessageCircle, FileText, Mic, MicOff, Moon, Sun, Search, Pencil, Plus, Globe } from 'lucide-react'
 import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/cockpit-helpers'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
-import { SCRIPT_SECTIONS, OBJECTIONS, resolveBeruf } from '@/lib/script-template'
+import { SCRIPT_SECTIONS, OBJECTIONS, resolveBeruf, resolveFirma } from '@/lib/script-template'
 import { cleanLeadName } from '@/lib/clean-name'
 import { EMAIL_TEMPLATES, WHATSAPP_TEMPLATES, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
 import { CloserNotify } from '@/components/closer-notify'
@@ -91,7 +91,7 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
     terminUhrzeit = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const firma = cluster?.firma?.trim() || 'Hebammen-Vorsorge'
+  const firma = resolveFirma(lead, cluster?.firma)
   const { beruf, berufPlural } = resolveBeruf(lead)
   const ort = getOrt(lead) || lead.state || ''
 

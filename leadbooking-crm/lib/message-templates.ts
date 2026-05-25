@@ -1,6 +1,6 @@
 import { Lead, Profile } from '@/types'
 import { buildEmailSignature } from './email-signature'
-import { resolveBeruf } from './script-template'
+import { resolveBeruf, resolveFirma } from './script-template'
 import { cleanLeadName } from './clean-name'
 
 // ============================================================
@@ -240,7 +240,7 @@ export const PLACEHOLDERS = [
   { key: '{termin_kurzdatum}', desc: 'Datum kurz', example: '15.05.2026' },
   { key: '{termin_uhrzeit}', desc: 'Uhrzeit', example: '14:00' },
   { key: '{teams_link}', desc: 'Microsoft Teams-Link', example: 'https://teams.microsoft.com/...' },
-  { key: '{firma}', desc: 'Firma', example: 'Hebammen-Vorsorge' },
+  { key: '{firma}', desc: 'Firma (berufsspezifisch: {beruf_plural}-Vorsorge)', example: 'Heilpraktiker-Vorsorge' },
   { key: '{signature}', desc: 'Mail-Signatur (nur E-Mail)', example: '(Standard- oder eigene Signatur)' },
 ]
 
@@ -306,7 +306,7 @@ export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>
     .replaceAll('{termin_kurzdatum}', terminKurz)
     .replaceAll('{termin_uhrzeit}', terminUhrzeit)
     .replaceAll('{teams_link}', lead.teams_link || '[Teams-Link]')
-    .replaceAll('{firma}', 'Hebammen-Vorsorge')
+    .replaceAll('{firma}', resolveFirma(lead))
     .replaceAll('{signature}', signature)
 }
 

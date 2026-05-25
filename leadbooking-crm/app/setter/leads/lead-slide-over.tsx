@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle, Globe, Pencil, Plus } from 'lucide-react'
 import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, buildWhatsappUrl } from '@/lib/message-templates'
-import { resolveBeruf } from '@/lib/script-template'
+import { resolveBeruf, resolveFirma } from '@/lib/script-template'
 import { cleanLeadName } from '@/lib/clean-name'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import toast from 'react-hot-toast'
@@ -60,7 +60,7 @@ function renderClusterText(text: string, lead: Lead, setter: SetterLite | null, 
     terminKurz = d.toLocaleDateString('de-DE')
     terminUhrzeit = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
   }
-  const firma = cluster?.firma?.trim() || 'Hebammen-Vorsorge'
+  const firma = resolveFirma(lead, cluster?.firma)
   const { beruf, berufPlural } = resolveBeruf(lead)
   const ort = getOrt(lead) || lead.state || ''
   return (text || '')
