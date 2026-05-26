@@ -204,6 +204,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
   type ActionSnapshot = {
     leadId: string
     label: string
+    activityLogId: string | null
     fields: {
       status: any
       recall_date: string | null
@@ -221,6 +222,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     return {
       leadId: lead.id,
       label,
+      activityLogId: null,
       fields: {
         status: lead.status,
         recall_date: anyL.recall_date ?? null,
@@ -237,8 +239,13 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     if (!lastAction || savingAction) return
     setSavingAction(true)
     const { error } = await supabase.from('leads').update(lastAction.fields as any).eq('id', lastAction.leadId)
+    if (error) { setSavingAction(false); toast.error('Rückgängig fehlgeschlagen: ' + error.message); return }
+    if (lastAction.activityLogId) {
+      const { error: delErr } = await supabase.from('activity_log').delete().eq('id', lastAction.activityLogId)
+      if (delErr) console.error('[activity_log undo]', delErr)
+    }
     setSavingAction(false)
-    if (error) { toast.error('Rückgängig fehlgeschlagen: ' + error.message); return }
+    if (lastAction.label === 'Termin') setTodayDone(n => Math.max(0, n - 1))
     setDeck(d => d.map(l => l.id === lastAction.leadId ? ({ ...l, ...lastAction.fields } as Lead) : l))
     const idx = deck.findIndex(l => l.id === lastAction.leadId)
     if (idx !== -1) setCurrentIdx(idx)
@@ -341,11 +348,12 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     setCurrentIdx(i => Math.max(0, i - 1))
   }
 
-  async function logActivity(leadId: string, newStatus: string, note?: string) {
-    const { error } = await supabase.from('activity_log').insert({
+  async function logActivity(leadId: string, newStatus: string, note?: string): Promise<string | null> {
+    const { data, error } = await supabase.from('activity_log').insert({
       lead_id: leadId, setter_id: setter.id, old_status: currentLead?.status || '', new_status: newStatus, note: note || null,
-    })
-    if (error) { console.error('[activity_log]', error); toast.error('⚠️ Aktivität nicht getrackt: ' + error.message) }
+    }).select('id').single()
+    if (error) { console.error('[activity_log]', error); toast.error('⚠️ Aktivität nicht getrackt: ' + error.message); return null }
+    return (data as any)?.id ?? null
   }
 
   async function handleSwipeUp() { setActionModal('termin') }
@@ -365,7 +373,11 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
       status: 'nicht_erreicht', recall_date: recall.toISOString(), call_attempts: attempts, last_call_attempt: new Date().toISOString(),
     }).eq('id', currentLead.id)
     if (error) { toast.error('Fehler: ' + error.message) }
-    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch) — ${recallLabel}`); setLastAction(snap); toast.success(recallLabel); advanceCard() }
+    else {
+      const logId = await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch) — ${recallLabel}`)
+      setLastAction({ ...snap, activityLogId: logId })
+      toast.success(recallLabel); advanceCard()
+    }
     setSavingAction(false)
   }
 
@@ -375,7 +387,11 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     setSavingAction(true)
     const { error } = await supabase.from('leads').update({ status: 'kein_interesse' }).eq('id', currentLead.id)
     if (error) { toast.error('Fehler: ' + error.message) }
-    else { await logActivity(currentLead.id, 'kein_interesse'); setLastAction(snap); toast.success('🚫 Kein Interesse'); advanceCard() }
+    else {
+      const logId = await logActivity(currentLead.id, 'kein_interesse')
+      setLastAction({ ...snap, activityLogId: logId })
+      toast.success('🚫 Kein Interesse'); advanceCard()
+    }
     setSavingAction(false)
   }
 
@@ -532,6 +548,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
             onClick={(e) => {
               if (!formattedPhone) { e.preventDefault(); return }
               supabase.from('leads').update({ call_attempts: (currentLead.call_attempts || 0) + 1, last_call_attempt: new Date().toISOString() }).eq('id', currentLead.id).then(() => {})
+              supabase.from('activity_log').insert({ lead_id: currentLead.id, setter_id: setter.id, old_status: currentLead.status || '', new_status: 'angerufen', note: null }).then(() => {})
             }}
             className="mt-6 flex items-center justify-center gap-3 w-full py-4 rounded-xl bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold text-lg shadow-lg">
             <Phone className="w-6 h-6" />{formattedPhone || 'Keine Nummer'}
@@ -604,8 +621,8 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
             const snap = captureSnapshot(currentLead, 'Termin')
             const { error } = await supabase.from('leads').update({ status: 'termin_gelegt', appointment_date: date, teams_link: teamsLink || null }).eq('id', currentLead.id)
             if (error) { toast.error('Fehler: ' + error.message); return }
-            await logActivity(currentLead.id, 'termin_gelegt', `Termin am ${new Date(date).toLocaleString('de-DE')}`)
-            setLastAction(snap)
+            const logId = await logActivity(currentLead.id, 'termin_gelegt', `Termin am ${new Date(date).toLocaleString('de-DE')}`)
+            setLastAction({ ...snap, activityLogId: logId })
             toast.success('🟡 Termin gelegt!')
             if (setter.sound_enabled !== false) playSuccessSound()
             setTodayDone(n => n + 1)
@@ -625,8 +642,8 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
             const snap = captureSnapshot(currentLead, 'Wiedervorlage')
             const { error } = await supabase.from('leads').update({ status: 'wiedervorlage', recall_date: date, call_attempts: (currentLead.call_attempts || 0) + 1, last_call_attempt: new Date().toISOString() }).eq('id', currentLead.id)
             if (error) { toast.error('Fehler: ' + error.message); return }
-            await logActivity(currentLead.id, 'wiedervorlage', `Wiedervorlage am ${new Date(date).toLocaleString('de-DE')}`)
-            setLastAction(snap)
+            const logId = await logActivity(currentLead.id, 'wiedervorlage', `Wiedervorlage am ${new Date(date).toLocaleString('de-DE')}`)
+            setLastAction({ ...snap, activityLogId: logId })
             toast.success('⏰ Wiedervorlage gespeichert'); setActionModal(null); advanceCard()
           }} />
       )}
