@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { CockpitClient } from './cockpit-client'
 import type { Lead, Profile } from '@/types'
+import { leadQualityScore } from '@/lib/lead-quality'
 
 export default async function CockpitPage() {
   const supabase = await createClient()
@@ -56,9 +57,23 @@ export default async function CockpitPage() {
     )
   }
 
+  // Frische Leads zusätzlich nach Qualität sortieren:
+  // 1) call_attempts asc (nie angerufene zuerst),
+  // 2) Qualitäts-Score desc (Handy/Personenname/weiblich/persönliche Mail),
+  // 3) score desc (vorhandener Lead-Score als Feintiebreaker).
+  const neueLeadsSorted = ((neueLeads as Lead[] | null) ?? []).slice().sort((a, b) => {
+    const aCalls = (a as any).call_attempts || 0
+    const bCalls = (b as any).call_attempts || 0
+    if (aCalls !== bCalls) return aCalls - bCalls
+    const aQ = leadQualityScore(a)
+    const bQ = leadQualityScore(b)
+    if (aQ !== bQ) return bQ - aQ
+    return ((b as any).score || 0) - ((a as any).score || 0)
+  })
+
   const seen = new Set<string>()
   const deck: Lead[] = []
-  for (const list of [wiedervorlagen, neueLeads, nichtErreicht]) {
+  for (const list of [wiedervorlagen, neueLeadsSorted, nichtErreicht]) {
     for (const lead of list || []) {
       if (!seen.has(lead.id)) {
         seen.add(lead.id)
