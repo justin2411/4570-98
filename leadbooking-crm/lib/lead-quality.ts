@@ -75,12 +75,20 @@ export function leadQualityScore(lead: Lead): number {
   if (/^\+49(15|16|17)/.test(phone)) s += 3
 
   // 2) Echter Personenname (kein Praxis-/Service-Wort, mind. Vor- + Nachname)
+  // Heuristik: "personlike" = jedes Token beginnt großgeschrieben und besteht
+  // aus Buchstaben (keine Zahlen, kein "&", kein "GmbH"). Mind. 2 Tokens.
   const beruf = ((lead as any).beruf || '').trim()
   const raw = ((lead as any).name || '').trim()
   const cleaned = cleanLeadName(raw, beruf)
   const tokens = cleaned.split(/\s+/).filter(Boolean)
-  if (tokens.length >= 2 && cleaned === raw) s += 2
-  if (tokens.length < 2) s -= 1
+  const tokenLooksPersonal = (t: string) => /^[A-ZÄÖÜ][a-zäöüß-]+$/.test(t)
+  const looksPersonal = tokens.length >= 2 && tokens.every(tokenLooksPersonal)
+  const hadNoise = cleaned !== raw
+
+  if (looksPersonal && !hadNoise) s += 2          // sauberer Vor- + Nachname
+  else if (looksPersonal && hadNoise) s += 1      // Personenname, aber Praxis-Wörter mit dabei
+  else if (tokens.length >= 2) s -= 1             // 2+ Wörter, aber nicht "personlike" → vermutl. Firmenname
+  else s -= 2                                     // 1 Wort oder leer → kaum personalisierbar
 
   // 3) Weiblicher Vorname (heuristisch über Namensliste)
   if (tokens.length >= 1) {
