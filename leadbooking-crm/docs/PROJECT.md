@@ -6,6 +6,51 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
 
 ---
 
+## 📍 Zwischenstand — Mai 2026
+
+**Setter-System läuft, Branding ist berufsneutral, Performance + Verteil-Tools sind live.**
+
+- ✅ Berufsneutrales zentrales Skript (Hook + alle Einwände, `{beruf}`/`{beruf_plural}`)
+- ✅ Cockpit mit Zurück-Button, Undo, qualitätsbasiertem Deck, schließbarer Post-Termin-Maske
+- ✅ Lead-Slide-over mit einheitlichem „Termin bestätigen"-Block (Closer + Mail + WhatsApp)
+- ✅ WhatsApp-Link-Normalisierung (15/15 getestet) — `wa.me`-Links immer korrekt
+- ✅ Mail-/WhatsApp-Signaturen schlank (nur Name + „Beratungsteam") — kein Hebammen-Branding mehr
+- ✅ Rangliste/Statistiken in Europe/Berlin-Zeit, im Dashboard, Reset-Button im Admin
+- ✅ Quality-Sort überall (Cockpit, Setter-Leads, Admin-Leads) — silent im Hintergrund, nicht für Setter sichtbar
+- ✅ Admin-UI für Lead-Verteilung (`/admin/leads` → 📤-Button) + Programmatic API (`POST /api/admin/distribute-leads`)
+- ✅ Agent-getriebene Verteilung per Bearer-Token (Env-Var `ADMIN_API_TOKEN`) — Claude Code kann nach Aufforderung verteilen / umstrukturieren, ohne dass der DB-Service-Key geteilt werden muss
+- ✅ Setter-Übersicht per `GET /api/admin/setters` (id + offene-Leads-Last + unzugeordnete-pro-Liste)
+- ✅ XI CRM Branding (Browser-Tab + PWA)
+- ✅ Drei lebende Docs (PROJECT/DECISIONS/WORKFLOW)
+
+**Aktuelle Setter-Last (Snapshot):**
+
+| Setter | offene Leads |
+|---|---:|
+| Justin Stich | 550 🔴 |
+| Max Weiß | 162 |
+| Lisa Becker | 111 |
+| Paul Sander | 45 |
+| Robert Cerbanches | 45 |
+| Nicholas Sirenko | 37 |
+| Antonia Tischler | 23 |
+| Christian Mende | 15 🟢 |
+| **Σ offen** | **988** |
+| Unzugeordnet | 0 |
+
+→ Sehr ungleich verteilt. Umverteilen jederzeit möglich (Admin-Button oder Agent per Token).
+
+**Noch offen (DB-Schritte vom User in Supabase):**
+- `supabase/leaderboard-timezone.sql` — Trigger auf Europe/Berlin
+- `supabase/perf-upgrade.sql` — Indizes + RPC
+
+**Bekannte Schwachstellen (nicht akut, dokumentiert in DECISIONS):**
+- Undo zählt Statistik nicht zurück (activity_log bleibt)
+- Call-Button schreibt kein `activity_log` → „Anrufe"-Zähler undercountet
+- Streak ist „distinct days", nicht „consecutive"
+
+---
+
 ## 🟦 Skript & Inhalte (berufsneutral)
 
 - **Zentrales Gesprächs-Skript** in `lib/script-template.ts` — gilt für **alle** Cluster (Heilpraktiker, Hebammen, Psychotherapeuten …). Kein per-Cluster-Override mehr.
@@ -68,7 +113,8 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
 - **Reset-Rangliste-Button** (siehe oben).
 - Lead-Übersicht serverseitig nach Qualität sortiert — auch unzugeordnete Leads.
 - **Leads verteilen** (`📤`-Button auf `/admin/leads` + `POST /api/admin/distribute-leads`): unzugeordnete Leads werden nach Qualität sortiert und qualitäts-balanciert per Round-Robin auf ausgewählte Setter verteilt. Optional Filter „Nur aus Liste" und Cap „Max. pro Setter".
-- **Verteilen/Umstrukturieren per API-Token**: Derselbe Endpoint akzeptiert auch Bearer-Token-Auth (Env-Var `ADMIN_API_TOKEN`) und unterstützt `includeAssigned: true` zum Umverteilen bereits zugewiesener Leads sowie `statuses`-Filter. Schreibzugriffe via Service-Role-Client.
+- **Verteilen/Umstrukturieren per API-Token**: Derselbe Endpoint akzeptiert auch Bearer-Token-Auth (Env-Var `ADMIN_API_TOKEN`) und unterstützt `includeAssigned: true` zum Umverteilen bereits zugewiesener Leads sowie `statuses`-Filter. Schreibzugriffe via Service-Role-Client. **Live und getestet** (Mai 2026).
+- **Setter-Übersicht** (`GET /api/admin/setters`, Token-Auth): liefert aktive Setter (id, name, email, openLeads) sowie eine Übersicht der unzugeordneten Leads pro Liste. Damit kann der Agent vor jeder Umverteilung sehen, was zu tun ist und wo die Last steht.
 
 ## 📄 Hilfs-Artefakte
 
@@ -80,5 +126,3 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
   - `supabase/leaderboard-timezone.sql` — Trigger auf Berlin-Zeit
   - `supabase/perf-upgrade.sql` — Indizes + RPC
 - **Bekannte Schwachstellen** (separates Dokument): Undo zählt Statistik nicht zurück; Call-Button schreibt kein `activity_log` (→ Anrufe-Statistik untercountet); Streak ist „distinct days" statt „consecutive".
-
-<!-- Trigger redeploy: env var pickup -->
