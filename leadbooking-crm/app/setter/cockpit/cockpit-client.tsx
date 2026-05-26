@@ -960,7 +960,10 @@ function PostTerminModal({ lead, setter, cluster, onContinue, onEditEmail }: { l
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 overflow-y-auto">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden my-4">
-        <div className="bg-gradient-to-br from-green-500 to-green-600 px-5 py-5 text-white text-center">
+        <div className="relative bg-gradient-to-br from-green-500 to-green-600 px-5 py-5 text-white text-center">
+          <button onClick={onContinue} className="absolute top-2 right-2 p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/15 active:bg-white/25" aria-label="Schließen">
+            <X className="w-5 h-5" />
+          </button>
           <div className="text-4xl mb-1">🎉</div><h2 className="text-lg font-bold">Termin gespeichert!</h2><p className="text-sm text-white/90 mt-0.5">{cleanLeadName(lead.name, getBeruf(lead))}</p>
         </div>
         <div className="px-5 pt-4">
