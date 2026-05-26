@@ -7,6 +7,7 @@ import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle,
 import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, buildWhatsappUrl } from '@/lib/message-templates'
 import { resolveBeruf, resolveFirma } from '@/lib/script-template'
 import { cleanLeadName } from '@/lib/clean-name'
+import { CloserNotify } from '@/components/closer-notify'
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import toast from 'react-hot-toast'
 
@@ -297,13 +298,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
   const website = getWebsite(lead)
   const showWebsite = isRealWebsite(website)
 
-  // WhatsApp-Varianten: Termin-Vorlagen erscheinen sobald ein Termin gespeichert ist, No-Show immer
-  const waVariants = [
-    { key: 'wa_confirmation', emoji: '✅', label: 'Terminbestätigung', desc: 'Mit Datum, Uhrzeit & Teams-Link', show: !!lead.appointment_date },
-    { key: 'wa_reminder', emoji: '🔔', label: 'Erinnerung (Vortag)', desc: '1 Tag vor dem Termin', show: !!lead.appointment_date },
-    { key: 'wa_reminder_3h', emoji: '⏰', label: 'Erinnerung (kurz vorher)', desc: 'Wenige Stunden vor dem Termin', show: !!lead.appointment_date },
-    { key: 'wa_no_show', emoji: '📵', label: 'Nicht erschienen', desc: 'Neuen Termin anbieten', show: !!lead.appointment_date },
-  ].filter(v => v.show)
+  const hasAppt = !!lead.appointment_date
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -344,26 +339,51 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
           </div>
         </div>
 
-        {/* WHATSAPP */}
-        {waVariants.length > 0 && (
-          <div className="px-5 py-3 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5"><MessageCircle className="w-3 h-3 text-[#25D366]" />WhatsApp</p>
-              <span className="text-[9px] text-gray-400 italic">Text wird vorbereitet</span>
-            </div>
-            <div className="space-y-1.5">
-              {waVariants.map(v => (
-                <a key={v.key} href={buildWhatsappUrl(lead.phone, renderClusterWhatsapp(v.key, lead, setterProfile, cluster))} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 w-full min-h-[44px] px-3 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/40 hover:bg-[#25D366]/20 active:scale-[0.98] transition-all">
-                  <span className="text-lg shrink-0">{v.emoji}</span>
-                  <span className="flex-1 text-left">
-                    <span className="block text-sm font-semibold text-[#075E54]">{v.label}</span>
-                    <span className="block text-[10px] text-gray-500">{v.desc}</span>
-                  </span>
-                  <MessageCircle className="w-4 h-4 text-[#25D366] opacity-70 shrink-0" />
-                </a>
-              ))}
-            </div>
+        {/* TERMIN BESTÄTIGEN (nach gelegtem Termin: Closer-Mail + Mail + WhatsApp) */}
+        {hasAppt && (
+          <div className="px-5 py-3 border-b border-gray-100 space-y-3">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">📬 Termin bestätigen</p>
+
+            {/* Closer benachrichtigen */}
+            <CloserNotify
+              lead={lead}
+              setterName={setterProfile?.full_name || ''}
+              teamsLink={lead.teams_link}
+              onCloserSet={(closerId) => onUpdate({ ...lead, closer_id: closerId } as Lead)}
+            />
+
+            {/* Mail-Bestätigung */}
+            {lead.email && lead.teams_link ? (
+              <button onClick={openEmailDraft}
+                className="w-full text-left p-3.5 rounded-xl border-2 border-gray-200 hover:border-[#2E75B6] hover:bg-blue-50 active:scale-[0.98] transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 bg-[#2E75B6] text-white">📧</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-gray-900">E-Mail-Bestätigung</div>
+                    <div className="text-xs text-gray-500 truncate">{lead.email}</div>
+                  </div>
+                  <span className="text-gray-400 shrink-0">›</span>
+                </div>
+              </button>
+            ) : (
+              <div className="p-3 rounded-xl border-2 border-dashed border-gray-300 text-xs text-gray-500">
+                {!lead.email && '⚠️ Lead hat keine E-Mail-Adresse.'}
+                {lead.email && !lead.teams_link && '💡 Teams-Link in „Terminzeit" eintragen und speichern, dann erscheint der E-Mail-Button.'}
+              </div>
+            )}
+
+            {/* WhatsApp-Bestätigung */}
+            <a href={buildWhatsappUrl(lead.phone, renderClusterWhatsapp('wa_confirmation', lead, setterProfile, cluster))} target="_blank" rel="noopener noreferrer"
+              className="block w-full text-left p-3.5 rounded-xl border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 active:scale-[0.98] transition-all">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 bg-green-500 text-white">💬</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm text-gray-900">WhatsApp-Bestätigung</div>
+                  <div className="text-xs text-gray-500 truncate">{formatPhoneForCall(lead.phone) || 'Keine Telefonnummer'}</div>
+                </div>
+                <span className="text-gray-400 shrink-0">›</span>
+              </div>
+            </a>
           </div>
         )}
 
@@ -399,16 +419,6 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
             <button onClick={saveAppointment} disabled={savingDate} className="flex-1 min-h-[44px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-sm font-semibold text-gray-900 transition-colors disabled:opacity-50">{savingDate ? 'Speichern...' : 'Termin speichern'}</button>
             {hasAppointment && <button onClick={clearAppointment} disabled={savingDate} className="min-h-[44px] px-3 rounded-xl bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 transition-colors disabled:opacity-50" aria-label="Termin entfernen"><X className="w-4 h-4" /></button>}
           </div>
-          {lead.email && lead.teams_link && lead.appointment_date && (
-            <button type="button" onClick={openEmailDraft} className="mt-2 w-full min-h-[44px] py-2 rounded-xl bg-[#2E75B6] hover:bg-[#1E3A5F] active:scale-[0.98] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"><span>📧</span><span>Bestätigung per E-Mail vorbereiten</span></button>
-          )}
-          {(!lead.email || !lead.teams_link || !lead.appointment_date) && (lead.appointment_date || teamsLinkInput) && (
-            <p className="mt-2 text-[11px] text-gray-500 leading-snug">
-              {!lead.email && '⚠️ Lead hat keine E-Mail-Adresse'}
-              {lead.email && !lead.appointment_date && '💡 Termin speichern, dann erscheint der E-Mail-Button'}
-              {lead.email && lead.appointment_date && !lead.teams_link && '💡 Teams-Link eintragen + Termin speichern, dann erscheint der E-Mail-Button'}
-            </p>
-          )}
         </div>
 
         {/* NOTIZ */}
