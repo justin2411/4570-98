@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/leads/status-badge'
 import { ExcelUpload } from './excel-upload'
 import { AssignModal } from './assign-modal'
 import { FixStatesModal } from './fix-states-modal'
+import { DistributeLeadsButton } from './distribute-button'
 import { Button } from '@/components/ui/button'
 import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen, Briefcase, Tag, AlertTriangle } from 'lucide-react'
 
@@ -198,6 +199,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
             <RefreshCw className="w-3.5 h-3.5" />
             {lastUpdate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </button>
+          <DistributeLeadsButton setters={setters} listNames={allLists} />
           <button onClick={selectAllInFiltered} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 hover:bg-gray-50">Alle sichtbaren ({filtered.length})</button>
 
           {selected.size > 0 && (
