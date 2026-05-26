@@ -82,19 +82,11 @@ function renderClusterText(text: string, lead: Lead, setter: SetterLite | null, 
     .replaceAll('{web}', cluster?.web || '')
 }
 
-function buildClusterSignature(setter: SetterLite | null, cluster: ClusterContent | null): string {
+function buildClusterSignature(setter: SetterLite | null, _cluster: ClusterContent | null): string {
   if (setter?.use_custom_signature && setter.custom_signature?.trim()) return setter.custom_signature.trim()
   const name = setter?.full_name || 'Ihr Berater'
   const role = setter?.role_title || 'Beratungsteam'
-  const phone = setter?.phone_direct?.trim()
-  const firma = (cluster?.firma?.trim() || 'Hebammen-Vorsorge').toUpperCase()
-  const web = cluster?.web?.trim() || 'www.hebammen-vorsorge.de'
-  const email = cluster?.kontakt_email?.trim() || 'beratung@hebammen-vorsorge.de'
-  const tagline = cluster?.tagline?.trim() || 'Altersvorsorge & Vermögensaufbau'
-  let sig = `${name}\n${role}`
-  if (phone) sig += `\nTel: ${phone}`
-  sig += `\n\n\n────────────────────────────────────────\n\n   ${firma}\n   ${tagline}\n\n   E-Mail:   ${email}\n   Web:      ${web}\n\n────────────────────────────────────────`
-  return sig
+  return `${name}\n${role}`
 }
 
 function renderClusterWhatsapp(templateId: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): string {

@@ -114,23 +114,14 @@ function renderClusterText(text: string, lead: Lead, setter: Partial<Profile>, c
     .replaceAll('{web}', cluster?.web || '')
 }
 
-// Cluster-spezifische Mail-Signatur (firma/web/kontakt aus Cluster, Fallback Hebammen)
-function buildClusterSignature(setter: Partial<Profile>, cluster: ClusterContent | null): string {
+// Mail-Signatur: bewusst schlicht — nur Name + Rolle. Kein Firmen-/Kontakt-Block.
+function buildClusterSignature(setter: Partial<Profile>, _cluster: ClusterContent | null): string {
   if (setter.use_custom_signature && setter.custom_signature?.trim()) {
     return setter.custom_signature.trim()
   }
   const name = setter.full_name || 'Ihr Berater'
-  const role = setter.role_title || `${cluster?.firma || 'Hebammen-Vorsorge'}-Beratungsteam`
-  const phone = setter.phone_direct?.trim()
-  const firma = (cluster?.firma?.trim() || 'Hebammen-Vorsorge').toUpperCase()
-  const web = cluster?.web?.trim() || 'www.hebammen-vorsorge.de'
-  const email = cluster?.kontakt_email?.trim() || 'beratung@hebammen-vorsorge.de'
-  const tagline = cluster?.tagline?.trim() || 'Altersvorsorge & Vermögensaufbau'
-
-  let sig = `${name}\n${role}`
-  if (phone) sig += `\nTel: ${phone}`
-  sig += `\n\n\n────────────────────────────────────────\n\n   ${firma}\n   ${tagline}\n\n   E-Mail:   ${email}\n   Web:      ${web}\n\n────────────────────────────────────────`
-  return sig
+  const role = setter.role_title || 'Beratungsteam'
+  return `${name}\n${role}`
 }
 
 // WhatsApp-Text aus Cluster (Fallback global), Platzhalter ersetzt

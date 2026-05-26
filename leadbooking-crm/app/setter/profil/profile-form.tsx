@@ -18,7 +18,7 @@ export function ProfileForm({ profile }: Props) {
 
   // Form-State
   const [fullName, setFullName] = useState(profile.full_name || '')
-  const [roleTitle, setRoleTitle] = useState(profile.role_title || 'Hebammen-Beratungsteam')
+  const [roleTitle, setRoleTitle] = useState(profile.role_title || 'Beratungsteam')
   const [teamsRoomUrl, setTeamsRoomUrl] = useState(profile.teams_room_url || '')
   const [phoneDirect, setPhoneDirect] = useState(profile.phone_direct || '')
   const [useCustom, setUseCustom] = useState(profile.use_custom_signature || false)
@@ -53,7 +53,7 @@ export function ProfileForm({ profile }: Props) {
       .from('profiles')
       .update({
         full_name: fullName.trim(),
-        role_title: roleTitle.trim() || 'Hebammen-Beratungsteam',
+        role_title: roleTitle.trim() || 'Beratungsteam',
         teams_room_url: teamsRoomUrl.trim() || null,
         phone_direct: phoneDirect.trim() || null,
         custom_signature: customSignature.trim() || null,
@@ -90,7 +90,7 @@ export function ProfileForm({ profile }: Props) {
           </div>
           <div>
             <label className={labelCls}>Berufsbezeichnung / Rolle</label>
-            <input type="text" value={roleTitle} onChange={e => setRoleTitle(e.target.value)} placeholder="z.B. Hebammen-Beratungsteam" className={inputCls} />
+            <input type="text" value={roleTitle} onChange={e => setRoleTitle(e.target.value)} placeholder="z.B. Beratungsteam" className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>Direkt-Telefon (optional)</label>

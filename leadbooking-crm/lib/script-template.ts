@@ -31,11 +31,11 @@ export function resolveBeruf(lead: Lead): { beruf: string; berufPlural: string }
 }
 
 // Berufsspezifischer Firmenname für {firma} (z.B. "Heilpraktiker-Vorsorge").
-// Ohne hinterlegten Beruf: Fallback (z.B. Cluster-Firma) bzw. "Hebammen-Vorsorge".
+// Ohne hinterlegten Beruf: Fallback (z.B. Cluster-Firma) bzw. "Vorsorge-Beratung".
 export function resolveFirma(lead: Lead, fallback?: string | null): string {
   const raw = ((lead as any).beruf || '').trim()
   if (raw) return `${resolveBeruf(lead).berufPlural}-Vorsorge`
-  return (fallback || '').trim() || 'Hebammen-Vorsorge'
+  return (fallback || '').trim() || 'Vorsorge-Beratung'
 }
 
 export const SCRIPT_SECTIONS: ScriptSection[] = [
