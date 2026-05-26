@@ -228,6 +228,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
     onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now })
     supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
       .then(({ data }) => { if (data) onUpdate(data as Lead) }).catch(() => {})
+    supabase.from('activity_log').insert({ lead_id: lead.id, setter_id: userId, old_status: lead.status || '', new_status: 'angerufen', note: null }).then(() => {})
   }
 
   async function saveNote() {
