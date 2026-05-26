@@ -68,6 +68,7 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
 - **Reset-Rangliste-Button** (siehe oben).
 - Lead-Übersicht serverseitig nach Qualität sortiert — auch unzugeordnete Leads.
 - **Leads verteilen** (`📤`-Button auf `/admin/leads` + `POST /api/admin/distribute-leads`): unzugeordnete Leads werden nach Qualität sortiert und qualitäts-balanciert per Round-Robin auf ausgewählte Setter verteilt. Optional Filter „Nur aus Liste" und Cap „Max. pro Setter".
+- **Verteilen/Umstrukturieren per API-Token**: Derselbe Endpoint akzeptiert auch Bearer-Token-Auth (Env-Var `ADMIN_API_TOKEN`) und unterstützt `includeAssigned: true` zum Umverteilen bereits zugewiesener Leads sowie `statuses`-Filter. Schreibzugriffe via Service-Role-Client.
 
 ## 📄 Hilfs-Artefakte
 
