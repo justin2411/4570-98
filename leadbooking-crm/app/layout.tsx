@@ -5,13 +5,13 @@ import { SWRegister } from '@/components/sw-register'
 import { InstallBanner } from '@/components/install-banner'
 
 export const metadata: Metadata = {
-  title: 'Hebammen-Vorsorge CRM',
-  description: 'CRM und Cockpit für das Hebammen-Vorsorge Team',
+  title: 'XI CRM',
+  description: 'CRM und Cockpit für das Setter-Team',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'HV CRM',
+    title: 'XI CRM',
   },
   icons: {
     icon: [
