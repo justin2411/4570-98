@@ -123,12 +123,24 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 
 ---
 
-## D-014 · Schmaler Admin-API-Token statt Service-Role-Key im Agent
+## D-014 · Schmaler Admin-API-Token statt Service-Role-Key im Agent ✅
 
-**Entscheidung:** Statt dem Agent (Claude Code) den Supabase Service-Role-Key zu geben, gibt es einen **schmalen Bearer-Token** (`ADMIN_API_TOKEN` env var), der genau die exponierten Admin-Endpoints triggern kann (`distribute-leads`, perspektivisch weitere). DB-Schreibzugriffe laufen serverseitig via `createAdminClient` (Service-Role).
+**Entscheidung:** Statt dem Agent (Claude Code) den Supabase Service-Role-Key zu geben, gibt es einen **schmalen Bearer-Token** (`ADMIN_API_TOKEN` env var), der genau die exponierten Admin-Endpoints triggern kann (`distribute-leads`, `setters`, perspektivisch weitere). DB-Schreibzugriffe laufen serverseitig via `createAdminClient` (Service-Role).
 
 **Warum:** Minimale Angriffsfläche. Der Token kann ausschließlich die definierten Endpoints; nicht die ganze DB. Token ist jederzeit revoke-bar (Env-Variable in Vercel ändern + Redeploy). Kein DB-Root-Key im Chat.
 
 **Wo gesetzt:** Vercel → Project Settings → Environment Variables → `ADMIN_API_TOKEN` (Production) — Wert ist ein langer Random-String.
 
 **Wie genutzt:** `curl -H "Authorization: Bearer <TOKEN>" -X POST <url>/api/admin/distribute-leads -d '...'`.
+
+**Status:** Live & verifiziert (Mai 2026). Auth funktioniert, Service-Role-Writes laufen sauber durch.
+
+---
+
+## D-015 · Read-Endpoint `GET /api/admin/setters` für Agent-Übersicht
+
+**Entscheidung:** Neben dem write-Endpoint (`distribute-leads`) gibt es einen read-Endpoint, der Setter-IDs, Namen, E-Mails sowie aktuelle Lead-Last + unzugeordnete-pro-Liste liefert.
+
+**Warum:** Der Agent braucht IDs (nicht nur Namen) für eine zielgerichtete Verteilung. Außerdem sieht er sofort, ob „verteilen" überhaupt was zu tun hat (unzugeordnete) bzw. wo die Last unausgewogen ist.
+
+**Auth:** Gleicher Bearer-Token wie `distribute-leads`. Token-Scope bleibt bewusst eng (nur diese paar Admin-Endpoints).
