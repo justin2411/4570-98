@@ -116,30 +116,52 @@ Rolle steht in `profiles.role`. Switch via Supabase Auth (E-Mail/Passwort).
 
 ### API-Endpoints (Agent / Automation)
 
-Beide Endpoints akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `ADMIN_API_TOKEN`).
+Alle akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `ADMIN_API_TOKEN`). Auth-Logik zentral in `lib/admin-auth.ts`.
 
-**`GET /api/admin/setters`** → Übersicht aktiver Setter mit offenen Leads + unzugeordneten pro Liste.
-```bash
-curl -X GET https://4570-98.vercel.app/api/admin/setters \
-  -H "Authorization: Bearer <ADMIN_API_TOKEN>"
-```
-Response: `{ setters: [{id, name, email, openLeads}], unassigned: {total, byList} }`
+> 🛑 **Goldene Regel (D-016):** Endpoints, die `assigned_to` schreiben (`distribute-leads`, `PATCH /api/admin/leads[/:id]` mit `assigned_to` im patch) ruft der Agent **niemals** ohne ausdrückliche Bestätigung im Chat auf.
 
-**`POST /api/admin/distribute-leads`** → Verteilt Leads qualitäts-balanced.
+**Übersicht / Read**
+
+| Endpoint | Was | Auth |
+|---|---|---|
+| `GET /api/admin/setters` | Aktive Setter + offene Leads + Unzugeordnete pro Liste | Token/Session |
+| `GET /api/admin/leads?status=&assignedTo=&listName=&search=&archived=&limit=&offset=&orderBy=&withQuality=` | Lead-Liste mit Filtern (inkl. optionalem Quality-Score) | Token/Session |
+| `GET /api/admin/leads/:id` | Einzel-Lead + activity_log + Setter/Closer | Token/Session |
+| `GET /api/admin/stats?groupBy=status,assigned_to,list_name,archived&listName=&includeArchived=` | Aggregate | Token/Session |
+| `GET /api/admin/closers` | Alle Closer | Token/Session |
+| `GET /api/admin/cluster-content[?listName=…]` | Branding/Vorlagen | Token/Session |
+| `GET /api/admin/profiles[?role=&is_active=]` | Profile-Liste | Token/Session |
+
+**Write — Verteilung (⚠️ D-016)**
+
+`POST /api/admin/distribute-leads` → Leads qualitäts-balanced verteilen.
 ```bash
 curl -X POST https://4570-98.vercel.app/api/admin/distribute-leads \
   -H "Authorization: Bearer <ADMIN_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"setterIds":["uuid1","uuid2"], "listName":"Heilpraktiker", "perSetterLimit":50, "includeAssigned":true, "statuses":["neu","angerufen"]}'
 ```
-Body-Optionen:
-- `setterIds` (pflicht): Ziel-Setter-UUIDs
-- `listName` (optional): Filter auf eine Liste
-- `perSetterLimit` (optional): Cap pro Setter
-- `includeAssigned: true` (optional): bezieht bereits zugewiesene Leads ein (= Umstrukturierung)
-- `statuses` (optional, default `['neu','angerufen']`): welche Lead-Status betrachtet werden
+Body: `setterIds` (Pflicht), `listName`, `perSetterLimit`, `includeAssigned`, `statuses`.
 
-**`POST /api/admin/reset-rangliste`** → Nur über Admin-Session (UI-Button auf `/admin/rangliste`).
+**Write — Leads**
+
+| Endpoint | Body / Query | Wirkung |
+|---|---|---|
+| `PATCH /api/admin/leads` | `{ leadIds, patch }` | Bulk-Update (Whitelist: name, phone, email, state, beruf, list_name, status, appointment_date, recall_date, notes, assigned_to ⚠️, closer_id, teams_link, call_attempts, last_call_attempt, archived) |
+| `PATCH /api/admin/leads/:id` | gleiches patch-Objekt | Einzel-Update |
+| `DELETE /api/admin/leads` | `{ leadIds, mode?: "archive"\|"hard", confirm? }` | Default: archivieren (soft). Hard-Delete nur mit `confirm: true` |
+| `DELETE /api/admin/leads/:id?mode=hard&confirm=true` | — | Einzel-Delete/Archiv |
+
+**Write — Stammdaten**
+
+| Endpoint | Was |
+|---|---|
+| `POST /api/admin/closers` `{name,email,phone?,is_active?}` | Closer anlegen |
+| `PATCH /api/admin/closers/:id` | Closer ändern |
+| `DELETE /api/admin/closers/:id` | Closer löschen |
+| `POST /api/admin/cluster-content` `{list_name, firma?, web?, kontakt_email?, tagline?, templates?}` | Upsert pro Liste |
+| `PATCH /api/admin/profiles/:id` | Setter-Felder ändern (Whitelist: full_name, role, role_title, phone_direct, is_active, daily_goal, sound_enabled, custom_signature, use_custom_signature, teams_room_url, avatar_color) |
+| `POST /api/admin/reset-rangliste` | Stats auf 0 (auch per Token) |
 
 ### Datenbank-Migrations (einmalig in Supabase einspielen)
 

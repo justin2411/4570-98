@@ -1,22 +1,23 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { checkAdminAuth } from '@/lib/admin-auth'
 import { NextResponse } from 'next/server'
 
 /**
  * POST /api/admin/reset-rangliste
  * Setzt alle Ranglisten-/Statistikdaten aller Setter auf 0.
- * Admin-only. Operationen:
+ * Auth: Admin-Session ODER Bearer-Token (ADMIN_API_TOKEN).
+ *
+ * Operationen:
  *   1) activity_log komplett leeren
  *   2) leaderboard_cache komplett leeren
  *   3) Leads im Status termin_gelegt / termin_stattgefunden zurücksetzen
  *      auf 'angerufen' + appointment_date = null
  */
-export async function POST() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 })
+export async function POST(req: Request) {
+  const auth = await checkAdminAuth(req)
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Nicht berechtigt' }, { status: 403 })
+  const supabase = createAdminClient()
 
   const { error: e1 } = await supabase.from('activity_log').delete().not('id', 'is', null)
   if (e1) return NextResponse.json({ error: 'activity_log: ' + e1.message }, { status: 500 })
@@ -26,7 +27,7 @@ export async function POST() {
 
   const { error: e3 } = await supabase
     .from('leads')
-    .update({ status: 'angerufen', appointment_date: null })
+    .update({ status: 'angerufen', appointment_date: null } as never)
     .in('status', ['termin_gelegt', 'termin_stattgefunden'])
   if (e3) return NextResponse.json({ error: 'leads: ' + e3.message }, { status: 500 })
 
