@@ -112,8 +112,11 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 
 ---
 
-## D-013 · Lead-Verteilung auf Setter — Quality-balanced Round-Robin (Plan)
+## D-013 · Lead-Verteilung auf Setter — Quality-balanced Round-Robin ✅
 
-**Plan (noch nicht implementiert):** Wenn ein Admin Leads an Setter verteilt, werden die unzugeordneten Leads erst nach Qualität sortiert, dann reihum auf die ausgewählten Setter verteilt.
+**Umgesetzt:** Unzugeordnete Leads werden nach `leadQualityScore` sortiert und reihum auf die ausgewählten Setter verteilt. Optional: nur eine Liste, mit Max-Cap pro Setter.
 
 **Warum:** Jeder Setter bekommt einen ähnlichen Mix aus Top- und Standard-Leads. Verhindert, dass ein Setter alle „Filet-Stücke" abbekommt.
+
+**Endpoint:** `POST /api/admin/distribute-leads` (admin-only).
+**UI:** Button auf `/admin/leads` + Dialog (Setter-Mehrfachauswahl, Listen-Filter, Limit).
