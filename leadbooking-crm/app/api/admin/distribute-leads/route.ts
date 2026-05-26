@@ -37,15 +37,7 @@ export async function POST(req: Request) {
     }
   }
   if (!tokenOk && !sessionOk) {
-    return NextResponse.json({
-      error: 'Nicht berechtigt',
-      debug: {
-        hasEnv: !!process.env.ADMIN_API_TOKEN,
-        envLen: (process.env.ADMIN_API_TOKEN || '').length,
-        gotTokenLen: provided.length,
-        match: !!expected && provided === expected,
-      },
-    }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht berechtigt' }, { status: 401 })
   }
 
   // ── Body parsen ───────────────────────────────────────────────────────
