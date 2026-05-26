@@ -204,7 +204,7 @@ function CloserFormModal({
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="anna.mueller@hebammen-vorsorge.de"
+              placeholder="anna.mueller@beispiel.de"
               className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#2E75B6] focus:outline-none"
             />
             <p className="text-[11px] text-gray-500 mt-1">An diese Adresse geht die Termin-Einladung.</p>

@@ -161,8 +161,7 @@ Bitte klicken Sie wenige Minuten vor dem Termin auf den Link — eine Installati
 Bei Fragen oder falls etwas dazwischenkommt, melden Sie sich gerne jederzeit.
 
 Liebe Grüße
-{berater}
-von {firma}`,
+{berater}`,
   },
   {
     id: 'wa_reminder',
@@ -234,8 +233,8 @@ export const PLACEHOLDERS = [
   { key: '{berater}', desc: 'Dein Vorname', example: 'Justin' },
   { key: '{berater_voll}', desc: 'Dein voller Name', example: 'Justin Koch' },
   { key: '{bundesland}', desc: 'Bundesland', example: 'Bayern' },
-  { key: '{beruf}', desc: 'Beruf des Leads (Singular)', example: 'Hebamme' },
-  { key: '{beruf_plural}', desc: 'Beruf des Leads (Plural)', example: 'Hebammen' },
+  { key: '{beruf}', desc: 'Beruf des Leads (Singular)', example: 'Heilpraktiker' },
+  { key: '{beruf_plural}', desc: 'Beruf des Leads (Plural)', example: 'Heilpraktiker' },
   { key: '{email}', desc: 'E-Mail des Leads', example: 'anna@example.de' },
   { key: '{termin_datum}', desc: 'Datum lang', example: 'Donnerstag, 15. Mai 2026' },
   { key: '{termin_kurzdatum}', desc: 'Datum kurz', example: '15.05.2026' },
@@ -286,7 +285,7 @@ export function renderMessage(text: string, lead: Lead, setter: Partial<Profile>
   if (opts?.includeSignature) {
     signature = buildEmailSignature({
       full_name: setter.full_name || 'Ihr Berater',
-      role_title: setter.role_title || 'Hebammen-Beratungsteam',
+      role_title: setter.role_title || 'Beratungsteam',
       phone_direct: setter.phone_direct || null,
       custom_signature: setter.custom_signature || null,
       use_custom_signature: setter.use_custom_signature || false,
