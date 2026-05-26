@@ -1,7 +1,7 @@
 {
-  "name": "Hebammen-Vorsorge CRM",
-  "short_name": "HV CRM",
-  "description": "CRM und Cockpit für Setter im Hebammen-Vorsorge Team",
+  "name": "XI CRM",
+  "short_name": "XI CRM",
+  "description": "CRM und Cockpit für das Setter-Team",
   "start_url": "/setter",
   "scope": "/",
   "display": "standalone",
