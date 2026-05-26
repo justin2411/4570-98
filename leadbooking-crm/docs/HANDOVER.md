@@ -43,6 +43,23 @@ Auch wenn der User vorher schon mal verteilt hat: **jedes neue Verteilen, Umvert
 
 ---
 
+## ❄️ Hebammen-Leads eingefroren (gesetzt 27.05.2026)
+
+**Hebammen-Leads sind eingefroren bis ~Ende August 2026.** Nicht anfassen — gilt für **Verteilung** und **Optimierung**.
+
+Konkret:
+- Bei `distribute-leads` Hebammen per `beruf` ausschließen (nicht in den Verteil-Pool).
+- Bei jeglicher Statistik / Funnel-Analyse / Probability-Score-Auswertung Hebammen separat ausweisen, nicht in die Headline mischen.
+- Bei Bulk-Status-Aktionen / Re-Assignments / Score-Optimierungen: Hebammen rausfiltern.
+
+**Filter (SQL):** `LOWER(TRIM(beruf)) LIKE 'hebamm%'` — deckt `Hebamme` (kanonisch, `BERUF_PLURAL`-Key) und `Hebammen` (Plural, kommt per Excel-Import vor) ab.
+
+**Filter (Token-API):** Sobald PR #25 in `main` ist, beim `distribute-leads` keinen `beruf`-Filter haben → entweder pro Liste verteilen (Hebammen-Cluster auslassen) oder vorab über `GET /api/admin/leads?listName=…` prüfen, dass die Ziel-Listen keine Hebammen enthalten.
+
+Die Funnel-Baseline-Query (`supabase/funnel-baseline.sql`) hält sich daran: Headline = ohne Hebammen, separate `HEBAMMEN`-Zeile nur zum Abgleich.
+
+---
+
 ## ✅ Was zuletzt fertig gemacht wurde
 
 - **PR #22** — Komplette Anleitung in `PROJECT.md` (Tech-Stack, Setter-/Admin-Workflow, API-Endpoints, DB-Migrations, Env-Vars)
