@@ -208,6 +208,54 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
   const [editPhoneOpen, setEditPhoneOpen] = useState(false)
   const [editEmailOpen, setEditEmailOpen] = useState(false)
 
+  // Undo-Snapshot: erlaubt es, die LETZTE Aktion (Termin / Wiedervorlage /
+  // Nicht erreicht / Kein Interesse) rückgängig zu machen.
+  type ActionSnapshot = {
+    leadId: string
+    label: string
+    fields: {
+      status: any
+      recall_date: string | null
+      appointment_date: string | null
+      call_attempts: number | null
+      last_call_attempt: string | null
+      teams_link: string | null
+      closer_id: string | null
+    }
+  }
+  const [lastAction, setLastAction] = useState<ActionSnapshot | null>(null)
+
+  function captureSnapshot(lead: Lead, label: string): ActionSnapshot {
+    const anyL = lead as any
+    return {
+      leadId: lead.id,
+      label,
+      fields: {
+        status: lead.status,
+        recall_date: anyL.recall_date ?? null,
+        appointment_date: lead.appointment_date ?? null,
+        call_attempts: anyL.call_attempts ?? null,
+        last_call_attempt: anyL.last_call_attempt ?? null,
+        teams_link: anyL.teams_link ?? null,
+        closer_id: anyL.closer_id ?? null,
+      },
+    }
+  }
+
+  async function undoLastAction() {
+    if (!lastAction || savingAction) return
+    setSavingAction(true)
+    const { error } = await supabase.from('leads').update(lastAction.fields as any).eq('id', lastAction.leadId)
+    setSavingAction(false)
+    if (error) { toast.error('Rückgängig fehlgeschlagen: ' + error.message); return }
+    setDeck(d => d.map(l => l.id === lastAction.leadId ? ({ ...l, ...lastAction.fields } as Lead) : l))
+    const idx = deck.findIndex(l => l.id === lastAction.leadId)
+    if (idx !== -1) setCurrentIdx(idx)
+    setDragOffset({ x: 0, y: 0 }); setDragging(false); setDrawer('closed'); setActionModal(null)
+    toast.success(`↶ ${lastAction.label} rückgängig`)
+    setLastAction(null)
+  }
+
   useEffect(() => {
     if (typeof window !== 'undefined') setDark(window.localStorage.getItem('cockpit-dark') === '1')
   }, [])
@@ -314,6 +362,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
 
   async function handleSwipeRight() {
     if (!currentLead || savingAction) return
+    const snap = captureSnapshot(currentLead, 'Nicht erreicht')
     setSavingAction(true)
     const attempts = (currentLead.call_attempts || 0) + 1
     let recall: Date
@@ -325,16 +374,17 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
       status: 'nicht_erreicht', recall_date: recall.toISOString(), call_attempts: attempts, last_call_attempt: new Date().toISOString(),
     }).eq('id', currentLead.id)
     if (error) { toast.error('Fehler: ' + error.message) }
-    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch) — ${recallLabel}`); toast.success(recallLabel); advanceCard() }
+    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch) — ${recallLabel}`); setLastAction(snap); toast.success(recallLabel); advanceCard() }
     setSavingAction(false)
   }
 
   async function handleSwipeLeft() {
     if (!currentLead || savingAction) return
+    const snap = captureSnapshot(currentLead, 'Kein Interesse')
     setSavingAction(true)
     const { error } = await supabase.from('leads').update({ status: 'kein_interesse' }).eq('id', currentLead.id)
     if (error) { toast.error('Fehler: ' + error.message) }
-    else { await logActivity(currentLead.id, 'kein_interesse'); toast.success('🚫 Kein Interesse'); advanceCard() }
+    else { await logActivity(currentLead.id, 'kein_interesse'); setLastAction(snap); toast.success('🚫 Kein Interesse'); advanceCard() }
     setSavingAction(false)
   }
 
@@ -445,6 +495,20 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
           className="bg-white rounded-2xl shadow-2xl p-6 cursor-grab active:cursor-grabbing select-none">
           <SwipeHints offset={dragOffset} />
 
+          {lastAction && (
+            <div className="flex justify-center mb-3">
+              <button
+                onClick={(e) => { e.stopPropagation(); undoLastAction() }}
+                onPointerDown={(e) => e.stopPropagation()}
+                disabled={savingAction}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold hover:bg-amber-100 active:bg-amber-200 disabled:opacity-50"
+                aria-label="Letzte Aktion rückgängig"
+              >
+                ↶ „{lastAction.label}" rückgängig
+              </button>
+            </div>
+          )}
+
           {(currentLead.call_attempts || 0) > 0 && (
             <div className="flex justify-center mb-3">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-medium">
@@ -546,9 +610,11 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
       {actionModal === 'termin' && (
         <TerminModal lead={currentLead} setter={setter} onClose={() => setActionModal(null)}
           onDone={async (date, teamsLink) => {
+            const snap = captureSnapshot(currentLead, 'Termin')
             const { error } = await supabase.from('leads').update({ status: 'termin_gelegt', appointment_date: date, teams_link: teamsLink || null }).eq('id', currentLead.id)
             if (error) { toast.error('Fehler: ' + error.message); return }
             await logActivity(currentLead.id, 'termin_gelegt', `Termin am ${new Date(date).toLocaleString('de-DE')}`)
+            setLastAction(snap)
             toast.success('🟡 Termin gelegt!')
             if (setter.sound_enabled !== false) playSuccessSound()
             setTodayDone(n => n + 1)
@@ -565,9 +631,11 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
       {actionModal === 'wiedervorlage' && (
         <WiedervorlageModal onClose={() => setActionModal(null)}
           onDone={async (date) => {
+            const snap = captureSnapshot(currentLead, 'Wiedervorlage')
             const { error } = await supabase.from('leads').update({ status: 'wiedervorlage', recall_date: date, call_attempts: (currentLead.call_attempts || 0) + 1, last_call_attempt: new Date().toISOString() }).eq('id', currentLead.id)
             if (error) { toast.error('Fehler: ' + error.message); return }
             await logActivity(currentLead.id, 'wiedervorlage', `Wiedervorlage am ${new Date(date).toLocaleString('de-DE')}`)
+            setLastAction(snap)
             toast.success('⏰ Wiedervorlage gespeichert'); setActionModal(null); advanceCard()
           }} />
       )}
