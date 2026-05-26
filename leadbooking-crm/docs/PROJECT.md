@@ -51,6 +51,135 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
 
 ---
 
+## 📖 Anleitung — Wie funktioniert das Tool?
+
+### Tech-Stack
+- **Frontend & API:** Next.js 14 (App Router), TypeScript, Tailwind CSS — alles in `leadbooking-crm/`
+- **Datenbank:** Supabase (Postgres + Auth + Realtime + RLS)
+- **Hosting:** Vercel (`main`-Branch → automatischer Production-Deploy)
+- **Repo:** `justin2411/4570-98`, Dev-Branch `claude/brave-galileo-n3x6e`
+
+### Rollen
+| Rolle | Was sie tun |
+|---|---|
+| **Setter** | Telefoniert Leads, legt Termine, dokumentiert (Cockpit, Lead-Liste, Wiedervorlage, Termine) |
+| **Admin** | Verwaltet Leads (Upload, Verteilung), Cluster-Inhalte, Closer, Ranglisten-Reset |
+| **Closer/Advisor** | Übernimmt vom Setter gelegte Termine (60-Min-Beratungen) |
+
+Rolle steht in `profiles.role`. Switch via Supabase Auth (E-Mail/Passwort).
+
+### Setter-Workflow (mobile-first)
+
+**1. Dashboard (`/setter`)** — Persönliche Tagesübersicht: Heute/Woche/Monat/Jahr-Statistik, Streak, Tier-Rangliste aller Setter (deutsche Zeit). Default-Einstieg.
+
+**2. Cockpit (`/setter/cockpit`)** — Vollbild-Anruf-Modus, eine Lead-Karte pro Bildschirm:
+- **Anrufen:** Großer Button mit Telefonnummer → öffnet Telefon-App.
+- **Skript & Einwände:** Im Drawer unten (📖 Skript / 💬 Einwände / 📝 Notizen). Skript ist zentral für alle Cluster, personalisiert über `{beruf}`, `{kunde_nachname}`, `{firma}` etc.
+- **Aktionen:** 4 Buttons (oder Wisch-Gesten):
+  - **Termin** (↑) → öffnet TerminModal (Datum/Uhrzeit/Teams-Link) → speichert → öffnet „Termin gespeichert"-Maske
+  - **Wiedervorlage** (↓) → Datum/Uhrzeit-Auswahl, Lead kommt automatisch zurück
+  - **Nicht erreicht** (→) → setzt auto-Recall (1.Versuch: +2h, 2.: +4h, 3.+: morgen 10 Uhr)
+  - **Kein Interesse** (←) → Lead raus
+- **Zurück-Button** (← im Header): zur vorherigen Karte navigieren.
+- **Undo** (gelber Pill auf der Karte): nach jeder Aktion einmal die Möglichkeit, sie rückgängig zu machen.
+- **Deck-Sortierung:** Wiedervorlagen → frische (nie angerufen) sortiert nach Qualität (Handy / echter Name / weiblich / persönliche Mail) → nicht erreicht. Setter sehen die Qualität NICHT, nur die Reihenfolge.
+
+**3. Nach gelegtem Termin** (PostTerminModal im Cockpit, „Termin bestätigen"-Block im Slide-over):
+- **Closer benachrichtigen** (CloserNotify): Closer wählen → Mail-App öffnet mit fertiger Termin-Mail (inkl. Lead-Beruf).
+- **E-Mail-Bestätigung** an den Lead (Microsoft-Teams-Link).
+- **WhatsApp-Bestätigung** an den Lead (Datum/Uhrzeit/Link, `wa.me`-Link robust normalisiert).
+- Maske mit **X** schließbar oder mit „Weiter"-Button advance.
+
+**4. Lead-Liste (`/setter/leads`)** — Alle zugewiesenen Leads, serverseitig nach Qualität sortiert (silent). Klick → Slide-over mit Details + Aktionen (gleiche wie Cockpit, plus Status-Buttons + Notizen).
+
+**5. Wiedervorlage (`/setter/wiedervorlage`)** — Fällige Recalls (Heute/Diese Woche/Alle). Klick → Slide-over.
+
+**6. Termine (`/setter/termine`)** — Alle gespeicherten Termine. Klick → Termin-Detail (Lead-Info, WhatsApp/Mail-Vorlagen, Closer ändern).
+
+**7. Profil (`/setter/profil`)** — Name, Rolle (default „Beratungsteam"), Telefon, custom Signatur, Daily Goal, Sound an/aus.
+
+### Admin-Workflow
+
+**1. Leads verwalten (`/admin/leads`)**
+- **Excel-Upload:** Spalten erkannt: `ansprechpartner, email, handynummer, bundesland, beruf, website, ort, list_name`. Beim Import wird der Name automatisch bereinigt (`cleanLeadName` entfernt Praxis-Wörter).
+- **Filter:** Liste, Beruf, Status, Setter.
+- **Bulk-Aktionen:** Setter zuweisen, Liste ändern, archivieren, fix-states.
+- **📤 Leads verteilen:** Modal mit Setter-Mehrfachauswahl + optionaler Listen-Filter + Max-pro-Setter. Verteilt unzugeordnete Leads qualitäts-balanced reihum.
+
+**2. Inhalte (`/admin/inhalte`)** — Pro Cluster (= Liste): Branding (Firma, Web, Mail, Tagline), WhatsApp- und E-Mail-Vorlagen. **Skript ist zentral** (kein per-Cluster-Override mehr).
+
+**3. Closer (`/admin/closers`)** — Closer (Berater) anlegen mit Name/E-Mail/Telefon.
+
+**4. Rangliste (`/admin/rangliste`)** — Vollständige Setter-Rangliste (Tier-System: VIP/Diamant/Platin/Gold/Silber/Bronze). Unten in roter Box: **„Ranglisten auf 0 zurücksetzen"** (löscht activity_log + leaderboard_cache + setzt termin_gelegt/stattgefunden auf 'angerufen').
+
+**5. Setter (`/admin/setter`)** — Setter aktivieren/deaktivieren.
+
+### API-Endpoints (Agent / Automation)
+
+Beide Endpoints akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `ADMIN_API_TOKEN`).
+
+**`GET /api/admin/setters`** → Übersicht aktiver Setter mit offenen Leads + unzugeordneten pro Liste.
+```bash
+curl -X GET https://4570-98.vercel.app/api/admin/setters \
+  -H "Authorization: Bearer <ADMIN_API_TOKEN>"
+```
+Response: `{ setters: [{id, name, email, openLeads}], unassigned: {total, byList} }`
+
+**`POST /api/admin/distribute-leads`** → Verteilt Leads qualitäts-balanced.
+```bash
+curl -X POST https://4570-98.vercel.app/api/admin/distribute-leads \
+  -H "Authorization: Bearer <ADMIN_API_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"setterIds":["uuid1","uuid2"], "listName":"Heilpraktiker", "perSetterLimit":50, "includeAssigned":true, "statuses":["neu","angerufen"]}'
+```
+Body-Optionen:
+- `setterIds` (pflicht): Ziel-Setter-UUIDs
+- `listName` (optional): Filter auf eine Liste
+- `perSetterLimit` (optional): Cap pro Setter
+- `includeAssigned: true` (optional): bezieht bereits zugewiesene Leads ein (= Umstrukturierung)
+- `statuses` (optional, default `['neu','angerufen']`): welche Lead-Status betrachtet werden
+
+**`POST /api/admin/reset-rangliste`** → Nur über Admin-Session (UI-Button auf `/admin/rangliste`).
+
+### Datenbank-Migrations (einmalig in Supabase einspielen)
+
+Im Supabase-SQL-Editor (idempotent, jederzeit wiederholbar):
+1. **`supabase/leaderboard-timezone.sql`** — Cache-Trigger auf Europe/Berlin (sonst springt „Heute" um 01-02 Uhr DE).
+2. **`supabase/perf-upgrade.sql`** — Composite-Indizes, pg_trgm für schnelle Suche, RPC `get_distinct_list_names()`.
+3. **`supabase/schema.sql`** — Hauptschema (nur bei Neu-Setup).
+
+### Wichtige Env-Variablen (Vercel)
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabase-URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Anon-Key (Client)
+- `SUPABASE_SERVICE_ROLE_KEY` — Service-Role-Key (Server, für admin-Operations)
+- `ADMIN_API_TOKEN` — Bearer-Token für Agent-getriebene Admin-Calls
+
+### Lokal entwickeln
+```bash
+cd leadbooking-crm
+npm install
+cp .env.local.example .env.local   # und ausfüllen
+npm run dev                         # → http://localhost:3000
+npx tsc --noEmit                    # Typecheck
+```
+Build wird von Vercel bei jedem `main`-Push automatisch erstellt.
+
+### Was Claude Code in diesem Projekt tun kann
+- ✅ Code-Änderungen (Features, Bugfixes, Refactors) → PR → Merge → Vercel deployt automatisch
+- ✅ Admin-API-Calls per Bearer-Token (Lead-Verteilung, Übersicht abrufen)
+- ✅ PDF-Generierung via pdfkit, Doku-Updates, SQL-Migration-Files erstellen
+- ❌ Keine direkten DB-Schreibzugriffe (kein Service-Key in der Cloud-Umgebung) → User muss SQL einspielen oder Admin-Button klicken
+- ❌ Keine Tests im echten Browser → bei UI-Änderungen ggf. Preview-Deploy prüfen, bevor merged wird
+
+### Branch- & PR-Konvention
+- Dev-Branch: **`claude/brave-galileo-n3x6e`** (force-pushed nach jedem Squash-Merge)
+- PRs gehen gegen `main`, Squash-Merge
+- Tools: Plain Claude Chat für Diskussion, Claude Code für Implementierung, VS Code lokal
+
+→ Mehr zum Workflow: `WORKFLOW.md`. Begründungen einzelner Entscheidungen: `DECISIONS.md`.
+
+---
+
 ## 🟦 Skript & Inhalte (berufsneutral)
 
 - **Zentrales Gesprächs-Skript** in `lib/script-template.ts` — gilt für **alle** Cluster (Heilpraktiker, Hebammen, Psychotherapeuten …). Kein per-Cluster-Override mehr.
