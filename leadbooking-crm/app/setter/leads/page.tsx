@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { LeadList } from './lead-list'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import type { Lead } from '@/types'
 
 export default async function SetterLeadsPage() {
@@ -15,13 +15,15 @@ export default async function SetterLeadsPage() {
     .select('*')
     .eq('assigned_to', user.id)
 
-  // Qualität nach vorne: nie angerufene zuerst, dann nach Qualitäts-Score, dann nach Lead-Score.
+  // Wahrscheinlichkeit nach vorne: nie angerufene zuerst, dann nach
+  // Probability-Score (gelernt aus termin_gelegt-Historie), dann Lead-Score.
+  const probScore = await getLeadProbabilityScorer()
   const leads = ((leadsRaw as Lead[] | null) ?? []).slice().sort((a, b) => {
     const aCalls = (a as any).call_attempts || 0
     const bCalls = (b as any).call_attempts || 0
     if (aCalls !== bCalls) return aCalls - bCalls
-    const aQ = leadQualityScore(a)
-    const bQ = leadQualityScore(b)
+    const aQ = probScore(a)
+    const bQ = probScore(b)
     if (aQ !== bQ) return bQ - aQ
     return ((b as any).score || 0) - ((a as any).score || 0)
   })

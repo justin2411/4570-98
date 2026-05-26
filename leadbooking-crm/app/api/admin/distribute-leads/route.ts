@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import type { Lead } from '@/types'
 
 /**
@@ -16,7 +16,8 @@ import type { Lead } from '@/types'
  *   statuses?:        string[]    // optional — Status-Filter (default: ['neu','angerufen'])
  * }
  *
- * Verteilung: nach leadQualityScore sortiert, Round-Robin auf die setterIds.
+ * Verteilung: nach Probability-Score (gelernt aus termin_gelegt-Historie)
+ * sortiert, Round-Robin auf die setterIds.
  */
 const DEFAULT_STATUSES = ['neu', 'angerufen']
 
@@ -79,8 +80,9 @@ export async function POST(req: Request) {
     })
   }
 
-  // Nach Qualität sortieren — bestes Lead zuerst
-  leads.sort((a, b) => leadQualityScore(b) - leadQualityScore(a))
+  // Nach Wahrscheinlichkeit sortieren — bestes Lead zuerst
+  const probScore = await getLeadProbabilityScorer()
+  leads.sort((a, b) => probScore(b) - probScore(a))
 
   // Round-Robin
   const assignments: Record<string, string[]> = {}

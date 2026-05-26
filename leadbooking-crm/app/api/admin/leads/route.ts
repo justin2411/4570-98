@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAuth } from '@/lib/admin-auth'
 import { NextResponse } from 'next/server'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import type { Lead } from '@/types'
 
 /**
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
   const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0)
   const orderBy = url.searchParams.get('orderBy') || 'created_at'
   const order = (url.searchParams.get('order') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc'
-  const withQuality = url.searchParams.get('withQuality') === 'true'
+  const withScore = url.searchParams.get('withScore') === 'true' || url.searchParams.get('withQuality') === 'true'
 
   const supabase = createAdminClient()
   let query = supabase.from('leads').select('*', { count: 'exact' })
@@ -57,9 +57,11 @@ export async function GET(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const leads = (data as Lead[] | null) ?? []
-  const enriched = withQuality
-    ? leads.map(l => ({ ...l, qualityScore: leadQualityScore(l) }))
-    : leads
+  let enriched: Array<Lead & { probabilityScore?: number }> = leads
+  if (withScore) {
+    const probScore = await getLeadProbabilityScorer()
+    enriched = leads.map(l => ({ ...l, probabilityScore: probScore(l) }))
+  }
 
   return NextResponse.json({
     leads: enriched,

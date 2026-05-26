@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAuth } from '@/lib/admin-auth'
 import { NextResponse } from 'next/server'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import type { Lead } from '@/types'
 
 /**
@@ -34,8 +34,9 @@ export async function GET(req: Request, ctx: RouteCtx) {
   if (e1) return NextResponse.json({ error: e1.message }, { status: 500 })
   if (!lead) return NextResponse.json({ error: 'Lead nicht gefunden' }, { status: 404 })
 
+  const probScore = await getLeadProbabilityScorer()
   return NextResponse.json({
-    lead: { ...(lead as Lead), qualityScore: leadQualityScore(lead as Lead) },
+    lead: { ...(lead as Lead), probabilityScore: probScore(lead as Lead) },
     activityLog: e2 ? [] : (log || []),
   })
 }

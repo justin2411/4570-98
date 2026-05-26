@@ -194,3 +194,28 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 - Goldene Regel D-016 als organisatorische Leitplanke obenauf
 
 **Tradeoff:** Mehr Code-Surface = mehr Fläche, die gepflegt werden will. Akzeptabel, weil jeder Endpoint die DRY-Auth nutzt und sich an dieselben Patterns hält.
+
+---
+
+## D-018 · Lead-Sortierung lernt aus `termin_gelegt`-Historie (Probability-Score)
+
+**Entscheidung:** Die zentrale Lead-Sortierung läuft ab jetzt über einen **gelernten Probability-Score** (`lib/lead-probability.ts`) statt über die statische `leadQualityScore`-Heuristik. Höher = höhere geschätzte Conversion-Wahrscheinlichkeit auf einen Termin.
+
+**Trainings-Signal:** Die DB selbst.
+- Positiv-Klasse: Leads mit `status ∈ {termin_gelegt, termin_stattgefunden}`
+- Negativ-Klasse: Leads mit `status = kein_interesse`
+- Unlabeled (gehen nicht ins Training): `neu`, `angerufen`, `nicht_erreicht`, `wiedervorlage`
+
+**Features (bewusst keine Anruf-Historie):** beruf, list_name, state, has_mobile (+49 15x/16x/17x), has_personal_email, is_female_name, has_free_provider_email, has_full_name.
+
+**Mathematik:** Per Feature-Wert geglättete Conversion-Rate (Laplace α=β=1), Score = Summe der log-Uplifts gegen Baseline. Klassisches Naive-Bayes-light, robust gegen kleine Stichproben.
+
+**Caching:** In-Memory-Singleton im Node-Prozess, TTL 30 Min. Bei zu wenigen Labeled-Leads (< 10) oder DB-Fehler sauberer Fallback auf statische `leadQualityScore`.
+
+**Sichtbarkeit:** Silent (D-009 bleibt — Setter sehen keinen Score). Sortierung passiert serverseitig.
+
+**Diagnose:** `GET /api/admin/lead-probability` liefert das aktuelle Modell als JSON inklusive Feature-Statistiken; `POST` erzwingt Neutraining.
+
+**Wo verwendet:** Cockpit-Deck, Setter-Leadliste, Admin-Leadliste, `distribute-leads` (Verteilung), Admin-API (`withScore`-Flag).
+
+**Tradeoff:** Mehr Komplexität als die alte Heuristik, dafür lernt das System aus echten Abschlüssen. Wenn die Stichprobe sehr klein ist (z. B. nach einem `reset-rangliste`), greift automatisch der Fallback — kein Bruch.

@@ -131,6 +131,8 @@ Alle akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `A
 | `GET /api/admin/closers` | Alle Closer | Token/Session |
 | `GET /api/admin/cluster-content[?listName=…]` | Branding/Vorlagen | Token/Session |
 | `GET /api/admin/profiles[?role=&is_active=]` | Profile-Liste | Token/Session |
+| `GET /api/admin/lead-probability` | Aktuelles Sortier-Modell + Feature-Statistiken (Diagnose) | Token/Session |
+| `POST /api/admin/lead-probability` | Modell sofort neu trainieren (Cache leeren) | Token/Session |
 
 **Write — Verteilung (⚠️ D-016)**
 
@@ -214,19 +216,20 @@ Build wird von Vercel bei jedem `main`-Push automatisch erstellt.
 ## 🟦 Lead-Daten
 
 - **Namens-Bereinigung** (`lib/clean-name.ts`): „Akkupunktur Gebhard" → „Gebhard". Praxis-/Service-Wörter (Akupunktur, Praxis, Studio, Physio, …) und der hinterlegte Beruf werden weggefiltert. Greift beim **Excel-Import** und beim **Anzeigen** (Cockpit-Header, Listen, Slide-over, Termine, Wiedervorlage, Mail-/WhatsApp-Vorlagen).
-- **Lead-Qualitäts-Score** (`lib/lead-quality.ts`): Bonus-Punkte für Handynummer (+3), echter Personenname (+2), weiblicher Vorname (+2), persönliche E-Mail (+1), freier Provider (+1).
+- **Lead-Qualitäts-Score** (`lib/lead-quality.ts`): Statische Heuristik — Bonus-Punkte für Handynummer (+3), echter Personenname (+2), weiblicher Vorname (+2), persönliche E-Mail (+1), freier Provider (+1). **Wird als Fallback** vom Probability-Score genutzt, wenn zu wenig Trainings-Daten da sind.
+- **Lead-Probability-Score** (`lib/lead-probability.ts`, D-018): Lernt aus der `termin_gelegt`-Historie und sortiert Leads nach geschätzter Conversion-Wahrscheinlichkeit. Features: beruf, list_name, state, has_mobile, persönliche/Free-Provider-Mail, weiblicher Vorname, vollständiger Name. Cache 30 Min im Server-Prozess. Diagnose-Endpoint: `GET /api/admin/lead-probability`.
 
 ## 🟦 Cockpit
 
 - **Zurück-Button** im Header (← navigiert zur vorherigen Lead-Karte).
-- **Deck-Sortierung**: nie angerufene Leads zuerst, davon die qualitativ besten oben. Wiedervorlagen vorne, „nicht erreicht" hinten.
+- **Deck-Sortierung**: nie angerufene Leads zuerst, davon die mit der höchsten Termin-Wahrscheinlichkeit oben (Probability-Score, D-018). Wiedervorlagen vorne, „nicht erreicht" hinten.
 - **Undo-Button** auf der Lead-Karte: letzte Aktion (Termin / Wiedervorlage / Nicht erreicht / Kein Interesse) rückgängig — Status + Datum-Felder werden in der DB zurückgesetzt, Cockpit springt zur Karte.
 - **Post-Termin-Maske** schließbar (X oben rechts) zusätzlich zum „Weiter"-Button.
 
 ## 🟦 Lead-Slide-over (Setter-Lead-Liste)
 
 - Nach gespeichertem Termin: einheitlicher **„📬 Termin bestätigen"**-Block — Closer-Benachrichtigung, dann E-Mail-Bestätigung, dann WhatsApp-Bestätigung. Die 4 alten WhatsApp-Varianten (24h, 3h, No-Show) sind entfernt.
-- **Sortierung** der Lead-Liste serverseitig nach Qualität (`leadQualityScore`), Sortierung im Hintergrund, **kein** sichtbarer Qualitäts-Indikator in der UI.
+- **Sortierung** der Lead-Liste serverseitig nach Probability-Score (`lib/lead-probability.ts`, D-018), im Hintergrund — **kein** sichtbarer Indikator in der UI.
 
 ## 🟦 Closer / Berater-Benachrichtigung
 
