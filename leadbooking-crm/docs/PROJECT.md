@@ -80,3 +80,5 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
   - `supabase/leaderboard-timezone.sql` — Trigger auf Berlin-Zeit
   - `supabase/perf-upgrade.sql` — Indizes + RPC
 - **Bekannte Schwachstellen** (separates Dokument): Undo zählt Statistik nicht zurück; Call-Button schreibt kein `activity_log` (→ Anrufe-Statistik untercountet); Streak ist „distinct days" statt „consecutive".
+
+<!-- Trigger redeploy: env var pickup -->
