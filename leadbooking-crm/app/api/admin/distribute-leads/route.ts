@@ -23,8 +23,8 @@ const DEFAULT_STATUSES = ['neu', 'angerufen']
 export async function POST(req: Request) {
   // ── Auth: Token ODER Session ──────────────────────────────────────────
   const authHeader = req.headers.get('authorization') || ''
-  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  const expected = process.env.ADMIN_API_TOKEN
+  const provided = (authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '').trim()
+  const expected = (process.env.ADMIN_API_TOKEN || '').trim()
   const tokenOk = !!provided && !!expected && provided === expected
 
   let sessionOk = false
@@ -37,7 +37,15 @@ export async function POST(req: Request) {
     }
   }
   if (!tokenOk && !sessionOk) {
-    return NextResponse.json({ error: 'Nicht berechtigt' }, { status: 401 })
+    return NextResponse.json({
+      error: 'Nicht berechtigt',
+      debug: {
+        hasEnv: !!process.env.ADMIN_API_TOKEN,
+        envLen: (process.env.ADMIN_API_TOKEN || '').length,
+        gotTokenLen: provided.length,
+        match: !!expected && provided === expected,
+      },
+    }, { status: 401 })
   }
 
   // ── Body parsen ───────────────────────────────────────────────────────
