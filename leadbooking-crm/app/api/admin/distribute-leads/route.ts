@@ -1,24 +1,46 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { leadQualityScore } from '@/lib/lead-quality'
 import type { Lead } from '@/types'
 
 /**
  * POST /api/admin/distribute-leads
- * Verteilt unzugeordnete Leads qualitäts-balanciert auf ausgewählte Setter
- * (Round-Robin durch nach Qualität sortierte Lead-Liste).
  *
- * Body: { setterIds: string[], listName?: string, perSetterLimit?: number }
- * Response: { ok, assigned: { [setterId]: count }, total }
+ * Auth: entweder Admin-Session (Cookie) ODER Bearer-Token (ADMIN_API_TOKEN env).
+ *
+ * Body: {
+ *   setterIds:        string[]    // Pflicht — Ziel-Setter
+ *   listName?:        string      // optional — nur aus einer Liste
+ *   perSetterLimit?:  number      // optional — max. pro Setter
+ *   includeAssigned?: boolean     // optional — auch bereits zugewiesene neu verteilen ("umstrukturieren")
+ *   statuses?:        string[]    // optional — Status-Filter (default: ['neu','angerufen'])
+ * }
+ *
+ * Verteilung: nach leadQualityScore sortiert, Round-Robin auf die setterIds.
  */
+const DEFAULT_STATUSES = ['neu', 'angerufen']
+
 export async function POST(req: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 })
+  // ── Auth: Token ODER Session ──────────────────────────────────────────
+  const authHeader = req.headers.get('authorization') || ''
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+  const expected = process.env.ADMIN_API_TOKEN
+  const tokenOk = !!provided && !!expected && provided === expected
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Nicht berechtigt' }, { status: 403 })
+  let sessionOk = false
+  if (!tokenOk) {
+    const supabaseUser = await createClient()
+    const { data: { user } } = await supabaseUser.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabaseUser.from('profiles').select('role').eq('id', user.id).single()
+      sessionOk = profile?.role === 'admin'
+    }
+  }
+  if (!tokenOk && !sessionOk) {
+    return NextResponse.json({ error: 'Nicht berechtigt' }, { status: 401 })
+  }
 
+  // ── Body parsen ───────────────────────────────────────────────────────
   const body = await req.json().catch(() => ({}))
   const setterIds: string[] = Array.isArray(body.setterIds)
     ? body.setterIds.filter((x: unknown) => typeof x === 'string')
@@ -29,38 +51,48 @@ export async function POST(req: Request) {
   const perSetterLimit: number = Number.isFinite(body.perSetterLimit) && body.perSetterLimit > 0
     ? Math.floor(body.perSetterLimit)
     : 0
+  const includeAssigned: boolean = body.includeAssigned === true
+  const statuses: string[] = Array.isArray(body.statuses) && body.statuses.length > 0
+    ? body.statuses.filter((s: unknown) => typeof s === 'string')
+    : DEFAULT_STATUSES
 
   if (setterIds.length === 0) {
     return NextResponse.json({ error: 'Keine Setter ausgewählt' }, { status: 400 })
   }
 
-  // Unzugeordnete Leads laden (optional auf eine Liste eingeschränkt)
-  let query = supabase.from('leads').select('*').is('assigned_to', null)
+  // ── DB-Operationen via Service-Role-Client (umgeht RLS sauber) ────────
+  const supabase = createAdminClient()
+
+  let query = supabase.from('leads').select('*')
+  if (!includeAssigned) query = query.is('assigned_to', null)
+  if (statuses.length > 0) query = query.in('status', statuses)
   if (listName) query = query.eq('list_name', listName)
+
   const { data: leadsRaw, error: e1 } = await query
   if (e1) return NextResponse.json({ error: 'leads: ' + e1.message }, { status: 500 })
 
   const leads = ((leadsRaw as Lead[] | null) ?? []).slice()
   if (leads.length === 0) {
-    return NextResponse.json({ ok: true, assigned: {}, total: 0 })
+    return NextResponse.json({
+      ok: true, assigned: {}, total: 0,
+      scope: { includeAssigned, statuses, listName, perSetterLimit },
+    })
   }
 
   // Nach Qualität sortieren — bestes Lead zuerst
   leads.sort((a, b) => leadQualityScore(b) - leadQualityScore(a))
 
-  // Round-Robin: zip durch die sortierte Liste, verteile reihum auf die Setter
+  // Round-Robin
   const assignments: Record<string, string[]> = {}
   for (const sid of setterIds) assignments[sid] = []
 
   const cap = perSetterLimit > 0 ? perSetterLimit * setterIds.length : leads.length
   const slice = leads.slice(0, cap)
-
   slice.forEach((lead, i) => {
-    const sid = setterIds[i % setterIds.length]
-    assignments[sid].push(lead.id)
+    assignments[setterIds[i % setterIds.length]].push(lead.id)
   })
 
-  // Bulk-Update pro Setter
+  // Bulk-Update
   const results: Record<string, number> = {}
   for (const [sid, leadIds] of Object.entries(assignments)) {
     if (leadIds.length === 0) { results[sid] = 0; continue }
@@ -71,5 +103,10 @@ export async function POST(req: Request) {
     results[sid] = leadIds.length
   }
 
-  return NextResponse.json({ ok: true, assigned: results, total: slice.length })
+  return NextResponse.json({
+    ok: true,
+    total: slice.length,
+    assigned: results,
+    scope: { includeAssigned, statuses, listName, perSetterLimit },
+  })
 }

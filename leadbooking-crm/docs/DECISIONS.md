@@ -120,3 +120,15 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 
 **Endpoint:** `POST /api/admin/distribute-leads` (admin-only).
 **UI:** Button auf `/admin/leads` + Dialog (Setter-Mehrfachauswahl, Listen-Filter, Limit).
+
+---
+
+## D-014 · Schmaler Admin-API-Token statt Service-Role-Key im Agent
+
+**Entscheidung:** Statt dem Agent (Claude Code) den Supabase Service-Role-Key zu geben, gibt es einen **schmalen Bearer-Token** (`ADMIN_API_TOKEN` env var), der genau die exponierten Admin-Endpoints triggern kann (`distribute-leads`, perspektivisch weitere). DB-Schreibzugriffe laufen serverseitig via `createAdminClient` (Service-Role).
+
+**Warum:** Minimale Angriffsfläche. Der Token kann ausschließlich die definierten Endpoints; nicht die ganze DB. Token ist jederzeit revoke-bar (Env-Variable in Vercel ändern + Redeploy). Kein DB-Root-Key im Chat.
+
+**Wo gesetzt:** Vercel → Project Settings → Environment Variables → `ADMIN_API_TOKEN` (Production) — Wert ist ein langer Random-String.
+
+**Wie genutzt:** `curl -H "Authorization: Bearer <TOKEN>" -X POST <url>/api/admin/distribute-leads -d '...'`.
