@@ -30,6 +30,36 @@
 
 ---
 
+## 🛑 Goldene Regel — Lead-Zuweisung (D-016)
+
+**Der Agent vergibt NIEMALS Leads ohne ausdrückliche Bestätigung im Chat.**
+
+Das gilt für alle schreibenden Endpoints, die `assigned_to` ändern können:
+- `POST /api/admin/distribute-leads`
+- `PATCH /api/admin/leads` (wenn `assigned_to` im patch ist)
+- `PATCH /api/admin/leads/:id` (wenn `assigned_to` im patch ist)
+
+Auch wenn der User vorher schon mal verteilt hat: **jedes neue Verteilen, Umverteilen, Einzel-Re-Assignment muss vorher kurz gegengezeichnet werden** („soll ich das jetzt so verteilen?"). Read-only ist immer ok. Status-Updates ohne `assigned_to`-Änderung sind ok.
+
+---
+
+## ❄️ Hebammen-Leads eingefroren (gesetzt 27.05.2026)
+
+**Hebammen-Leads sind eingefroren bis ~Ende August 2026.** Nicht anfassen — gilt für **Verteilung** und **Optimierung**.
+
+Konkret:
+- Bei `distribute-leads` Hebammen per `beruf` ausschließen (nicht in den Verteil-Pool).
+- Bei jeglicher Statistik / Funnel-Analyse / Probability-Score-Auswertung Hebammen separat ausweisen, nicht in die Headline mischen.
+- Bei Bulk-Status-Aktionen / Re-Assignments / Score-Optimierungen: Hebammen rausfiltern.
+
+**Filter (SQL):** `LOWER(TRIM(beruf)) LIKE 'hebamm%'` — deckt `Hebamme` (kanonisch, `BERUF_PLURAL`-Key) und `Hebammen` (Plural, kommt per Excel-Import vor) ab.
+
+**Filter (Token-API):** Sobald PR #25 in `main` ist, beim `distribute-leads` keinen `beruf`-Filter haben → entweder pro Liste verteilen (Hebammen-Cluster auslassen) oder vorab über `GET /api/admin/leads?listName=…` prüfen, dass die Ziel-Listen keine Hebammen enthalten.
+
+Die Funnel-Baseline-Query (`supabase/funnel-baseline.sql`) hält sich daran: Headline = ohne Hebammen, separate `HEBAMMEN`-Zeile nur zum Abgleich.
+
+---
+
 ## ✅ Was zuletzt fertig gemacht wurde
 
 - **PR #22** — Komplette Anleitung in `PROJECT.md` (Tech-Stack, Setter-/Admin-Workflow, API-Endpoints, DB-Migrations, Env-Vars)
@@ -133,6 +163,26 @@ curl -s -X POST https://4570-98.vercel.app/api/admin/distribute-leads \
     ],
     "includeAssigned": true
   }'
+```
+
+### Lead-Liste mit Filtern lesen
+```bash
+curl -s "https://4570-98.vercel.app/api/admin/leads?status=neu&status=angerufen&assignedTo=<UUID>&limit=20&withQuality=true" \
+  -H "Authorization: Bearer <ADMIN_API_TOKEN>" | python3 -m json.tool
+```
+
+### Bulk-Status-Update (KEINE Zuweisung)
+```bash
+curl -s -X PATCH https://4570-98.vercel.app/api/admin/leads \
+  -H "Authorization: Bearer <ADMIN_API_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"leadIds":["uuid1","uuid2"], "patch":{"status":"kein_interesse"}}'
+```
+
+### Stats-Übersicht (Aggregate)
+```bash
+curl -s "https://4570-98.vercel.app/api/admin/stats?groupBy=status,assigned_to" \
+  -H "Authorization: Bearer <ADMIN_API_TOKEN>" | python3 -m json.tool
 ```
 
 ### Lokal entwickeln

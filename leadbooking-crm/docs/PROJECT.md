@@ -116,30 +116,54 @@ Rolle steht in `profiles.role`. Switch via Supabase Auth (E-Mail/Passwort).
 
 ### API-Endpoints (Agent / Automation)
 
-Beide Endpoints akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `ADMIN_API_TOKEN`).
+Alle akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `ADMIN_API_TOKEN`). Auth-Logik zentral in `lib/admin-auth.ts`.
 
-**`GET /api/admin/setters`** → Übersicht aktiver Setter mit offenen Leads + unzugeordneten pro Liste.
-```bash
-curl -X GET https://4570-98.vercel.app/api/admin/setters \
-  -H "Authorization: Bearer <ADMIN_API_TOKEN>"
-```
-Response: `{ setters: [{id, name, email, openLeads}], unassigned: {total, byList} }`
+> 🛑 **Goldene Regel (D-016):** Endpoints, die `assigned_to` schreiben (`distribute-leads`, `PATCH /api/admin/leads[/:id]` mit `assigned_to` im patch) ruft der Agent **niemals** ohne ausdrückliche Bestätigung im Chat auf.
 
-**`POST /api/admin/distribute-leads`** → Verteilt Leads qualitäts-balanced.
+**Übersicht / Read**
+
+| Endpoint | Was | Auth |
+|---|---|---|
+| `GET /api/admin/setters` | Aktive Setter + offene Leads + Unzugeordnete pro Liste | Token/Session |
+| `GET /api/admin/leads?status=&assignedTo=&listName=&search=&archived=&limit=&offset=&orderBy=&withQuality=` | Lead-Liste mit Filtern (inkl. optionalem Quality-Score) | Token/Session |
+| `GET /api/admin/leads/:id` | Einzel-Lead + activity_log + Setter/Closer | Token/Session |
+| `GET /api/admin/stats?groupBy=status,assigned_to,list_name,archived&listName=&includeArchived=` | Aggregate | Token/Session |
+| `GET /api/admin/closers` | Alle Closer | Token/Session |
+| `GET /api/admin/cluster-content[?listName=…]` | Branding/Vorlagen | Token/Session |
+| `GET /api/admin/profiles[?role=&is_active=]` | Profile-Liste | Token/Session |
+| `GET /api/admin/lead-probability` | Aktuelles Sortier-Modell + Feature-Statistiken (Diagnose) | Token/Session |
+| `POST /api/admin/lead-probability` | Modell sofort neu trainieren (Cache leeren) | Token/Session |
+
+**Write — Verteilung (⚠️ D-016)**
+
+`POST /api/admin/distribute-leads` → Leads qualitäts-balanced verteilen.
 ```bash
 curl -X POST https://4570-98.vercel.app/api/admin/distribute-leads \
   -H "Authorization: Bearer <ADMIN_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"setterIds":["uuid1","uuid2"], "listName":"Heilpraktiker", "perSetterLimit":50, "includeAssigned":true, "statuses":["neu","angerufen"]}'
 ```
-Body-Optionen:
-- `setterIds` (pflicht): Ziel-Setter-UUIDs
-- `listName` (optional): Filter auf eine Liste
-- `perSetterLimit` (optional): Cap pro Setter
-- `includeAssigned: true` (optional): bezieht bereits zugewiesene Leads ein (= Umstrukturierung)
-- `statuses` (optional, default `['neu','angerufen']`): welche Lead-Status betrachtet werden
+Body: `setterIds` (Pflicht), `listName`, `perSetterLimit`, `includeAssigned`, `statuses`.
 
-**`POST /api/admin/reset-rangliste`** → Nur über Admin-Session (UI-Button auf `/admin/rangliste`).
+**Write — Leads**
+
+| Endpoint | Body / Query | Wirkung |
+|---|---|---|
+| `PATCH /api/admin/leads` | `{ leadIds, patch }` | Bulk-Update (Whitelist: name, phone, email, state, beruf, list_name, status, appointment_date, recall_date, notes, assigned_to ⚠️, closer_id, teams_link, call_attempts, last_call_attempt, archived) |
+| `PATCH /api/admin/leads/:id` | gleiches patch-Objekt | Einzel-Update |
+| `DELETE /api/admin/leads` | `{ leadIds, mode?: "archive"\|"hard", confirm? }` | Default: archivieren (soft). Hard-Delete nur mit `confirm: true` |
+| `DELETE /api/admin/leads/:id?mode=hard&confirm=true` | — | Einzel-Delete/Archiv |
+
+**Write — Stammdaten**
+
+| Endpoint | Was |
+|---|---|
+| `POST /api/admin/closers` `{name,email,phone?,is_active?}` | Closer anlegen |
+| `PATCH /api/admin/closers/:id` | Closer ändern |
+| `DELETE /api/admin/closers/:id` | Closer löschen |
+| `POST /api/admin/cluster-content` `{list_name, firma?, web?, kontakt_email?, tagline?, templates?}` | Upsert pro Liste |
+| `PATCH /api/admin/profiles/:id` | Setter-Felder ändern (Whitelist: full_name, role, role_title, phone_direct, is_active, daily_goal, sound_enabled, custom_signature, use_custom_signature, teams_room_url, avatar_color) |
+| `POST /api/admin/reset-rangliste` | Stats auf 0 (auch per Token) |
 
 ### Datenbank-Migrations (einmalig in Supabase einspielen)
 
@@ -192,19 +216,20 @@ Build wird von Vercel bei jedem `main`-Push automatisch erstellt.
 ## 🟦 Lead-Daten
 
 - **Namens-Bereinigung** (`lib/clean-name.ts`): „Akkupunktur Gebhard" → „Gebhard". Praxis-/Service-Wörter (Akupunktur, Praxis, Studio, Physio, …) und der hinterlegte Beruf werden weggefiltert. Greift beim **Excel-Import** und beim **Anzeigen** (Cockpit-Header, Listen, Slide-over, Termine, Wiedervorlage, Mail-/WhatsApp-Vorlagen).
-- **Lead-Qualitäts-Score** (`lib/lead-quality.ts`): Bonus-Punkte für Handynummer (+3), echter Personenname (+2), weiblicher Vorname (+2), persönliche E-Mail (+1), freier Provider (+1).
+- **Lead-Qualitäts-Score** (`lib/lead-quality.ts`): Statische Heuristik — Bonus-Punkte für Handynummer (+3), echter Personenname (+2), weiblicher Vorname (+2), persönliche E-Mail (+1), freier Provider (+1). **Wird als Fallback** vom Probability-Score genutzt, wenn zu wenig Trainings-Daten da sind.
+- **Lead-Probability-Score** (`lib/lead-probability.ts`, D-018): Lernt aus der `termin_gelegt`-Historie und sortiert Leads nach geschätzter Conversion-Wahrscheinlichkeit. Features: beruf, list_name, state, has_mobile, persönliche/Free-Provider-Mail, weiblicher Vorname, vollständiger Name. Cache 30 Min im Server-Prozess. Diagnose-Endpoint: `GET /api/admin/lead-probability`.
 
 ## 🟦 Cockpit
 
 - **Zurück-Button** im Header (← navigiert zur vorherigen Lead-Karte).
-- **Deck-Sortierung**: nie angerufene Leads zuerst, davon die qualitativ besten oben. Wiedervorlagen vorne, „nicht erreicht" hinten.
+- **Deck-Sortierung**: nie angerufene Leads zuerst, davon die mit der höchsten Termin-Wahrscheinlichkeit oben (Probability-Score, D-018). Wiedervorlagen vorne, „nicht erreicht" hinten.
 - **Undo-Button** auf der Lead-Karte: letzte Aktion (Termin / Wiedervorlage / Nicht erreicht / Kein Interesse) rückgängig — Status + Datum-Felder werden in der DB zurückgesetzt, Cockpit springt zur Karte.
 - **Post-Termin-Maske** schließbar (X oben rechts) zusätzlich zum „Weiter"-Button.
 
 ## 🟦 Lead-Slide-over (Setter-Lead-Liste)
 
 - Nach gespeichertem Termin: einheitlicher **„📬 Termin bestätigen"**-Block — Closer-Benachrichtigung, dann E-Mail-Bestätigung, dann WhatsApp-Bestätigung. Die 4 alten WhatsApp-Varianten (24h, 3h, No-Show) sind entfernt.
-- **Sortierung** der Lead-Liste serverseitig nach Qualität (`leadQualityScore`), Sortierung im Hintergrund, **kein** sichtbarer Qualitäts-Indikator in der UI.
+- **Sortierung** der Lead-Liste serverseitig nach Probability-Score (`lib/lead-probability.ts`, D-018), im Hintergrund — **kein** sichtbarer Indikator in der UI.
 
 ## 🟦 Closer / Berater-Benachrichtigung
 

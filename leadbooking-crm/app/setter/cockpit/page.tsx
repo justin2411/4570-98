@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { CockpitClient } from './cockpit-client'
 import type { Lead, Profile } from '@/types'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 
 export default async function CockpitPage() {
   const supabase = await createClient()
@@ -51,16 +51,17 @@ export default async function CockpitPage() {
     )
   }
 
-  // Frische Leads zusätzlich nach Qualität sortieren:
+  // Frische Leads zusätzlich nach Wahrscheinlichkeit sortieren:
   // 1) call_attempts asc (nie angerufene zuerst),
-  // 2) Qualitäts-Score desc (Handy/Personenname/weiblich/persönliche Mail),
+  // 2) Probability-Score desc (gelernt aus termin_gelegt-Historie, Fallback Quality),
   // 3) score desc (vorhandener Lead-Score als Feintiebreaker).
+  const probScore = await getLeadProbabilityScorer()
   const neueLeadsSorted = ((neueLeads as Lead[] | null) ?? []).slice().sort((a, b) => {
     const aCalls = (a as any).call_attempts || 0
     const bCalls = (b as any).call_attempts || 0
     if (aCalls !== bCalls) return aCalls - bCalls
-    const aQ = leadQualityScore(a)
-    const bQ = leadQualityScore(b)
+    const aQ = probScore(a)
+    const bQ = probScore(b)
     if (aQ !== bQ) return bQ - aQ
     return ((b as any).score || 0) - ((a as any).score || 0)
   })

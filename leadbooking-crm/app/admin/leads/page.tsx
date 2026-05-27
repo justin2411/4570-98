@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AdminLeadsClient } from './client'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import type { Lead } from '@/types'
 
 export default async function AdminLeadsPage() {
@@ -26,10 +26,12 @@ export default async function AdminLeadsPage() {
     from += batchSize
   }
 
-  // Qualität nach vorne — über alle Leads, unabhängig von Zuweisung.
+  // Wahrscheinlichkeit nach vorne — über alle Leads, unabhängig von Zuweisung.
+  // Modell wird aus der termin_gelegt-Historie gelernt (Cache 30 Min, Fallback Quality).
+  const probScore = await getLeadProbabilityScorer()
   allLeads.sort((a, b) => {
-    const aQ = leadQualityScore(a as unknown as Lead)
-    const bQ = leadQualityScore(b as unknown as Lead)
+    const aQ = probScore(a as unknown as Lead)
+    const bQ = probScore(b as unknown as Lead)
     if (aQ !== bQ) return bQ - aQ
     return ((b as any).score || 0) - ((a as any).score || 0)
   })
