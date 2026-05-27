@@ -356,16 +356,14 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     const snap = captureSnapshot(currentLead, 'Nicht erreicht')
     setSavingAction(true)
     const attempts = (currentLead.call_attempts || 0) + 1
-    let recall: Date
-    let recallLabel: string
-    if (attempts === 1) { recall = new Date(Date.now() + 2 * 3600000); recallLabel = '🔁 Wiedervorlage in 2h' }
-    else if (attempts === 2) { recall = new Date(Date.now() + 4 * 3600000); recallLabel = '🔁 Wiedervorlage in 4h' }
-    else { recall = new Date(); recall.setDate(recall.getDate() + 1); recall.setHours(10, 0, 0, 0); recallLabel = `🔁 ${attempts}. Versuch — morgen 10 Uhr` }
-    const { error } = await supabase.from('leads').update({
-      status: 'nicht_erreicht', recall_date: recall.toISOString(), call_attempts: attempts, last_call_attempt: new Date().toISOString(),
-    }).eq('id', currentLead.id)
+    // Bewusst KEIN auto-Recall mehr: einmal "nicht erreicht" = endgültig aus dem Deck.
+    // recall_date wird genullt, falls von alter Logik noch was drinstand.
+    const { data: updated, error } = await supabase.from('leads').update({
+      status: 'nicht_erreicht', recall_date: null, call_attempts: attempts, last_call_attempt: new Date().toISOString(),
+    }).eq('id', currentLead.id).select('id')
     if (error) { toast.error('Fehler: ' + error.message) }
-    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch) — ${recallLabel}`); setLastAction(snap); toast.success(recallLabel); advanceCard() }
+    else if (!updated || updated.length === 0) { toast.error('⚠️ Lead konnte nicht aktualisiert werden (Zugriff verweigert?)') }
+    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch)`); setLastAction(snap); toast.success('📵 Nicht erreicht'); advanceCard() }
     setSavingAction(false)
   }
 
@@ -373,8 +371,9 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [] }: Prop
     if (!currentLead || savingAction) return
     const snap = captureSnapshot(currentLead, 'Kein Interesse')
     setSavingAction(true)
-    const { error } = await supabase.from('leads').update({ status: 'kein_interesse' }).eq('id', currentLead.id)
+    const { data: updated, error } = await supabase.from('leads').update({ status: 'kein_interesse' }).eq('id', currentLead.id).select('id')
     if (error) { toast.error('Fehler: ' + error.message) }
+    else if (!updated || updated.length === 0) { toast.error('⚠️ Lead konnte nicht aktualisiert werden (Zugriff verweigert?)') }
     else { await logActivity(currentLead.id, 'kein_interesse'); setLastAction(snap); toast.success('🚫 Kein Interesse'); advanceCard() }
     setSavingAction(false)
   }

@@ -14,18 +14,20 @@ export default async function CockpitPage() {
   const now = new Date().toISOString()
 
   // Alle Lade-Queries parallel (statt nacheinander) → schnellerer Cockpit-Start.
+  // "kein_interesse" und "nicht_erreicht" werden BEWUSST NICHT geladen
+  // (Setter-Entscheidung: einmal abgelehnt/nicht-erreicht = endgültig aus dem Cockpit).
+  // Wer explizit nochmal versuchen will, nutzt "Wiedervorlage".
   const [
     { data: profile },
     { data: clusterContent },
     { data: wiedervorlagen },
     { data: neueLeads },
-    { data: nichtErreicht },
   ] = await Promise.all([
     // Setter-Profil
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     // Cluster-Content (Skript/Branding/Templates pro Liste)
     supabase.from('cluster_content').select('*'),
-    // 1) Fällige Wiedervorlagen
+    // 1) Fällige Wiedervorlagen (explizit vom Setter geplant)
     supabase.from('leads').select('*')
       .eq('assigned_to', user.id)
       .eq('status', 'wiedervorlage')
@@ -38,14 +40,6 @@ export default async function CockpitPage() {
       .in('status', ['neu', 'angerufen'])
       .order('call_attempts', { ascending: true, nullsFirst: true })
       .order('score', { ascending: false })
-      .limit(100),
-    // 3) Nicht erreicht — nur wenn Wartezeit abgelaufen
-    supabase.from('leads').select('*')
-      .eq('assigned_to', user.id)
-      .eq('status', 'nicht_erreicht')
-      .or(`recall_date.is.null,recall_date.lte.${now}`)
-      .order('call_attempts', { ascending: true, nullsFirst: true })
-      .order('last_call_attempt', { ascending: true, nullsFirst: true })
       .limit(100),
   ])
 
@@ -73,7 +67,7 @@ export default async function CockpitPage() {
 
   const seen = new Set<string>()
   const deck: Lead[] = []
-  for (const list of [wiedervorlagen, neueLeadsSorted, nichtErreicht]) {
+  for (const list of [wiedervorlagen, neueLeadsSorted]) {
     for (const lead of list || []) {
       if (!seen.has(lead.id)) {
         seen.add(lead.id)
