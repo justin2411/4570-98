@@ -40,7 +40,9 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   const supabase = createClient()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
-  const [listFilter, setListFilter] = useState<string>('alle')
+  // Kein Default — Setter wählt aktiv eine Zielgruppe (Beruf) aus.
+  // '' = noch nichts ausgewählt → Liste bleibt leer mit Prompt.
+  const [listFilter, setListFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [navList, setNavList] = useState<string[]>([])
   const [navIdx, setNavIdx] = useState<number | null>(null)
@@ -70,12 +72,17 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   }, [leads])
 
   const listScoped = useMemo(() => {
-    if (listFilter === 'alle') return leads
+    if (listFilter === '') return []                 // kein Beruf gewählt → leer
     if (listFilter === '__none__') return leads.filter(l => !getBeruf(l))
     return leads.filter(l => getBeruf(l) === listFilter)
   }, [leads, listFilter])
 
-  const searched = useMemo(() => listScoped.filter(l => matchesSearch(l, search)), [listScoped, search])
+  // Beim Suchen wird über ALLE Leads gesucht (auch außerhalb des aktiven
+  // Beruf-Filters und auch kein_interesse), damit Rückrufer auffindbar sind.
+  const searched = useMemo(() => {
+    const base = search.trim() ? leads : listScoped
+    return base.filter(l => matchesSearch(l, search))
+  }, [leads, listScoped, search])
   const filtered = useMemo(() => {
     // Suche zeigt immer alles (auch kein_interesse), damit Rückrufer auffindbar sind.
     if (search.trim()) {
@@ -109,24 +116,25 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
 
   return (
     <div className="space-y-4">
-      {/* Beruf-Filter (zuoberst). Pro Tab strikt nach beruf — leads ohne den
-          jeweiligen beruf tauchen NICHT auf. Kein Default-Highlight; Setter
-          klickt aktiv eine Gruppe. */}
+      {/* Beruf-Filter (zuoberst). Pro Tab strikt nach beruf. Kein Default —
+          beim Erstaufruf ist nichts ausgewählt und die Liste bleibt leer. */}
       {berufe.length > 0 && (
         <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E3A5F] uppercase tracking-wide px-1 self-center">
             <FolderOpen className="w-4 h-4" /> Beruf
           </div>
-          <button onClick={() => setListFilter('alle')}
-            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
-            Alle ({leads.length})
-          </button>
           {berufe.map(([name, count]) => (
             <button key={name} onClick={() => setListFilter(name === '— ohne Beruf —' ? '__none__' : name)}
               className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${(listFilter === name) || (listFilter === '__none__' && name === '— ohne Beruf —') ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
               {name} ({count})
             </button>
           ))}
+        </div>
+      )}
+
+      {!listFilter && !search.trim() && berufe.length > 0 && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-6 text-center text-sm text-[#1E3A5F]">
+          👆 Wähle oben eine Zielgruppe, um deine Leads zu sehen.
         </div>
       )}
 
