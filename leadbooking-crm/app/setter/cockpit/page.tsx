@@ -104,6 +104,10 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
 
   return (
     <CockpitClient
+      // key forciert Remount bei jedem Beruf-Wechsel — sonst behält
+      // useState(initialDeck) den alten Deck-State und das Switching
+      // hätte keinen sichtbaren Effekt.
+      key={berufFilter || '__alle__'}
       initialDeck={deck}
       setter={profile as Profile}
       clusterContent={(clusterContent ?? []) as never[]}
