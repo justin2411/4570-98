@@ -97,15 +97,16 @@ CREATE OR REPLACE FUNCTION public.upsert_blacklist_on_terminal_status()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   norm text;
-  terminals text[] := ARRAY['kein_interesse', 'termin_gelegt', 'termin_stattgefunden'];
 BEGIN
-  IF NEW.status = ANY(terminals)
+  -- NEW.status hat Typ lead_status (ENUM); ::text-Cast nötig, sonst
+  -- "operator does not exist: lead_status = text" beim Vergleich mit text[].
+  IF NEW.status::text IN ('kein_interesse', 'termin_gelegt', 'termin_stattgefunden')
      AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status)
   THEN
     norm := normalize_phone(NEW.phone);
     IF norm IS NOT NULL THEN
       INSERT INTO blacklist (phone, email, name, beruf, original_lead_id, reason, created_by)
-      VALUES (norm, NEW.email, NEW.name, NEW.beruf, NEW.id, NEW.status, NEW.assigned_to)
+      VALUES (norm, NEW.email, NEW.name, NEW.beruf, NEW.id, NEW.status::text, NEW.assigned_to)
       ON CONFLICT (phone) DO NOTHING;
     END IF;
   END IF;
