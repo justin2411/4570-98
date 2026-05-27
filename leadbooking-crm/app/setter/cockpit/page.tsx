@@ -6,14 +6,16 @@ import { CockpitClient } from './cockpit-client'
 import type { Lead, Profile } from '@/types'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { filterBlacklistedLeads } from '@/lib/blacklist'
+import { isHandyLead } from '@/lib/handy-check'
 
-export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ beruf?: string }> }) {
+export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ beruf?: string; handy?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const sp = await searchParams
   const berufFilter = (sp.beruf || '').trim()
+  const handyOnly = sp.handy === 'true'
 
   const now = new Date().toISOString()
 
@@ -87,7 +89,9 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
       }
     }
   }
-  const deck = await filterBlacklistedLeads(rawDeck)
+  const deckAfterBlacklist = await filterBlacklistedLeads(rawDeck)
+  // Optional: nur Handynummern (+49 15x/16x/17x) anzeigen
+  const deck = handyOnly ? deckAfterBlacklist.filter(isHandyLead) : deckAfterBlacklist
 
   // Available-Berufe für die Switcher-Chip-Reihe
   const berufCounts: Record<string, number> = {}
@@ -104,10 +108,10 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
 
   return (
     <CockpitClient
-      // key forciert Remount bei jedem Beruf-Wechsel — sonst behält
+      // key forciert Remount bei jedem Filter-Wechsel — sonst behält
       // useState(initialDeck) den alten Deck-State und das Switching
       // hätte keinen sichtbaren Effekt.
-      key={berufFilter || '__alle__'}
+      key={`${berufFilter || '__alle__'}|${handyOnly ? 'h' : 'a'}`}
       initialDeck={deck}
       setter={profile as Profile}
       clusterContent={(clusterContent ?? []) as never[]}
@@ -115,6 +119,7 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
       noBerufCount={noBerufCount}
       totalOpen={totalOpen}
       activeBeruf={berufFilter}
+      handyOnly={handyOnly}
     />
   )
 }

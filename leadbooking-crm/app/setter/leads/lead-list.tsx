@@ -7,6 +7,7 @@ import { LeadSlideOver } from './lead-slide-over'
 import { Search, X, Phone, FolderOpen } from 'lucide-react'
 import { formatPhoneForCall } from '@/lib/phone'
 import { cleanLeadName } from '@/lib/clean-name'
+import { isHandyLead } from '@/lib/handy-check'
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   neu: 'Neu', angerufen: 'Angerufen', nicht_erreicht: 'Nicht erreicht',
@@ -43,6 +44,7 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   // Kein Default — Setter wählt aktiv eine Zielgruppe (Beruf) aus.
   // '' = noch nichts ausgewählt → Liste bleibt leer mit Prompt.
   const [listFilter, setListFilter] = useState<string>('')
+  const [handyOnly, setHandyOnly] = useState<boolean>(false)
   const [search, setSearch] = useState('')
   const [navList, setNavList] = useState<string[]>([])
   const [navIdx, setNavIdx] = useState<number | null>(null)
@@ -72,10 +74,12 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   }, [leads])
 
   const listScoped = useMemo(() => {
-    if (listFilter === '') return []                 // kein Beruf gewählt → leer
-    if (listFilter === '__none__') return leads.filter(l => !getBeruf(l))
-    return leads.filter(l => getBeruf(l) === listFilter)
-  }, [leads, listFilter])
+    let base: Lead[]
+    if (listFilter === '') base = []                 // kein Beruf gewählt → leer
+    else if (listFilter === '__none__') base = leads.filter(l => !getBeruf(l))
+    else base = leads.filter(l => getBeruf(l) === listFilter)
+    return handyOnly ? base.filter(isHandyLead) : base
+  }, [leads, listFilter, handyOnly])
 
   // Beim Suchen wird über ALLE Leads gesucht (auch außerhalb des aktiven
   // Beruf-Filters und auch kein_interesse), damit Rückrufer auffindbar sind.
@@ -129,6 +133,11 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
               {name} ({count})
             </button>
           ))}
+          <button onClick={() => setHandyOnly(h => !h)}
+            className={`ml-auto px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${handyOnly ? 'bg-emerald-500 text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}
+            title="Nur Mobilfunknummern (+49 15x/16x/17x)">
+            📱 Nur Handys{handyOnly ? ' ✓' : ''}
+          </button>
         </div>
       )}
 
