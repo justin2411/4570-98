@@ -21,6 +21,9 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
   termin_stattgefunden: 'bg-green-100 text-green-700', kein_interesse: 'bg-red-100 text-red-700',
 }
 const ALL_STATUSES: LeadStatus[] = ['neu','angerufen','nicht_erreicht','wiedervorlage','termin_gelegt','termin_stattgefunden','kein_interesse']
+// kein_interesse ist Blacklist (D-019) — im Default-View ausgeblendet,
+// findbar nur via Suche oder explizit gewähltem "Kein Interesse"-Filter.
+const HIDDEN_BY_DEFAULT: LeadStatus[] = ['kein_interesse']
 
 function matchesSearch(lead: Lead, q: string): boolean {
   const qt = q.trim().toLowerCase()
@@ -55,10 +58,17 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   }, [userId])
 
   const searched = useMemo(() => leads.filter(l => matchesSearch(l, search)), [leads, search])
-  const filtered = useMemo(
-    () => statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter),
-    [searched, statusFilter]
-  )
+  const filtered = useMemo(() => {
+    // Suche zeigt immer alles (auch kein_interesse), damit Rückrufer auffindbar sind.
+    if (search.trim()) {
+      return statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter)
+    }
+    if (statusFilter === 'alle') {
+      // Default-View: kein_interesse aus der Liste raus (Blacklist, D-019).
+      return searched.filter(l => !HIDDEN_BY_DEFAULT.includes(l.status))
+    }
+    return searched.filter(l => l.status === statusFilter)
+  }, [searched, statusFilter, search])
 
   function openLead(idx: number) {
     setNavList(filtered.map(l => l.id))

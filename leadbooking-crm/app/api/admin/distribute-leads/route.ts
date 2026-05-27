@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
+import { filterBlacklistedLeads } from '@/lib/blacklist'
 import type { Lead } from '@/types'
 
 /**
@@ -72,10 +73,14 @@ export async function POST(req: Request) {
   const { data: leadsRaw, error: e1 } = await query
   if (e1) return NextResponse.json({ error: 'leads: ' + e1.message }, { status: 500 })
 
-  const leads = ((leadsRaw as Lead[] | null) ?? []).slice()
+  const rawLeads = ((leadsRaw as Lead[] | null) ?? []).slice()
+  // Blacklist filtern: Telefonnummern mit kein_interesse-Historie kommen
+  // niemals erneut in den Verteil-Pool (D-019).
+  const leads = await filterBlacklistedLeads(rawLeads)
+  const skippedBlacklisted = rawLeads.length - leads.length
   if (leads.length === 0) {
     return NextResponse.json({
-      ok: true, assigned: {}, total: 0,
+      ok: true, assigned: {}, total: 0, skippedBlacklisted,
       scope: { includeAssigned, statuses, listName, perSetterLimit },
     })
   }
@@ -109,6 +114,7 @@ export async function POST(req: Request) {
     ok: true,
     total: slice.length,
     assigned: results,
+    skippedBlacklisted,
     scope: { includeAssigned, statuses, listName, perSetterLimit },
   })
 }

@@ -60,6 +60,26 @@ Die Funnel-Baseline-Query (`supabase/funnel-baseline.sql`) hält sich daran: Hea
 
 ---
 
+## 🚫 Blacklist (D-019) — kein_interesse ist persistent
+
+**Regel:** Wer einmal `kein_interesse` ist, wird nie wieder angerufen — auch nicht nach Lead-Löschung oder Re-Import.
+
+**Mechanik:**
+- DB-Trigger schreibt `kein_interesse`-Leads automatisch in `blacklist` (Key = normalisierte Telefon).
+- `blacklist` überlebt Lead-Hard-Delete (FK ON DELETE SET NULL).
+- Re-Imports einer blacklisteten Nummer bekommen sofort `status='kein_interesse'` (BEFORE-INSERT-Trigger).
+- `distribute-leads` filtert Blacklist vor Round-Robin → `skippedBlacklisted`-Count in der Response.
+- Cockpit-Deck filtert Blacklist als zweite Sicherung.
+
+**Findbarkeit:**
+- Setter sieht `kein_interesse` nicht in `/setter/leads` Default-View.
+- Setter-**Suche zeigt sie aber**, damit Rückrufer einsortierbar sind.
+- Admin: `GET /api/admin/blacklist?search=…`, `POST` zum manuellen Hinzufügen, `DELETE /api/admin/blacklist/:id` zum Entfernen (für Korrekturen).
+
+**Einmaliger Setup-Schritt:** `supabase/blacklist-setup.sql` im Supabase-SQL-Editor ausführen (Tabelle + Trigger + Backfill aller bestehenden `kein_interesse`-Leads).
+
+---
+
 ## ✅ Was zuletzt fertig gemacht wurde
 
 - **PR #22** — Komplette Anleitung in `PROJECT.md` (Tech-Stack, Setter-/Admin-Workflow, API-Endpoints, DB-Migrations, Env-Vars)

@@ -133,6 +133,10 @@ Alle akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `A
 | `GET /api/admin/profiles[?role=&is_active=]` | Profile-Liste | Token/Session |
 | `GET /api/admin/lead-probability` | Aktuelles Sortier-Modell + Feature-Statistiken (Diagnose) | Token/Session |
 | `POST /api/admin/lead-probability` | Modell sofort neu trainieren (Cache leeren) | Token/Session |
+| `GET /api/admin/blacklist?search=&limit=&offset=` | Blacklist-Einträge (D-019) | Token/Session |
+| `POST /api/admin/blacklist` `{phone, name?, email?, beruf?, reason?}` | Manuell zur Blacklist | Token/Session |
+| `DELETE /api/admin/blacklist` `{ids?, phones?}` | Bulk-Entfernen | Token/Session |
+| `DELETE /api/admin/blacklist/:id` | Einzel-Entfernen | Token/Session |
 
 **Write — Verteilung (⚠️ D-016)**
 
