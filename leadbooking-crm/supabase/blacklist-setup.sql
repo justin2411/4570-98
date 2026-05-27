@@ -2,17 +2,26 @@
 -- Blacklist-Setup für XI CRM
 -- ------------------------------------------------------------
 -- Idempotent: kann gefahrlos (auch mehrfach) im Supabase-SQL-Editor
--- ausgeführt werden. Persistente Sperre für "kein_interesse"-Leads.
+-- ausgeführt werden. Persistente Sperre gegen Doppel-Anrufe.
+--
+-- WAS AUF DIE BLACKLIST KOMMT (jeder Wechsel in einen dieser States
+-- triggert idempotenten INSERT):
+--   • kein_interesse        → Lead hat abgelehnt
+--   • termin_gelegt         → Lead hat einen Termin
+--   • termin_stattgefunden  → Termin hat stattgefunden
+-- Das `reason`-Feld in der Blacklist hält fest, welcher Status der
+-- Auslöser war (für spätere Diagnose/Filter).
 --
 -- WAS DAS LÖST:
---   1) Wenn ein Lead auf 'kein_interesse' gesetzt wird, kommt seine
---      (normalisierte) Telefonnummer auf eine zentrale Blacklist.
+--   1) Wenn ein Lead in einen dieser Terminal-States wechselt, kommt
+--      seine (normalisierte) Telefonnummer auf die Blacklist.
 --   2) Blacklist überlebt das Löschen des Lead-Datensatzes (ON DELETE
---      SET NULL auf der FK) — wir verlieren also Nummer/Name/Mail nicht.
---   3) Wird derselbe Lead später erneut importiert (UNIQUE-Constraint
---      auf leads.phone greift erst nach Hard-Delete), springt der
---      BEFORE-INSERT-Trigger ein und setzt status sofort auf
---      'kein_interesse' — er taucht nirgends mehr im aktiven Pool auf.
+--      SET NULL auf der FK) — Nummer/Name/Mail bleiben erhalten.
+--   3) Wird ein blacklisteter Lead später erneut importiert (z. B.
+--      nach Hard-Delete aller Leads + frischem Excel-Import), springt
+--      der BEFORE-INSERT-Trigger ein und setzt status sofort auf
+--      'kein_interesse' — er taucht nirgends mehr im aktiven Pool auf,
+--      unabhängig davon, was sein originaler Blacklist-Reason war.
 --   4) App-Side filtern Cockpit-Deck und distribute-leads zusätzlich
 --      explizit gegen die Blacklist (Defense in Depth).
 --
@@ -81,19 +90,22 @@ CREATE POLICY blacklist_admin_all ON public.blacklist FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
 );
 
--- ── Trigger 1: Lead → kein_interesse ⇒ Blacklist ──────────────
-CREATE OR REPLACE FUNCTION public.upsert_blacklist_on_kein_interesse()
+-- ── Trigger 1: Lead → Terminal-Status ⇒ Blacklist ─────────────
+-- Greift bei kein_interesse, termin_gelegt, termin_stattgefunden.
+-- reason-Feld speichert, welcher Status der Auslöser war.
+CREATE OR REPLACE FUNCTION public.upsert_blacklist_on_terminal_status()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   norm text;
+  terminals text[] := ARRAY['kein_interesse', 'termin_gelegt', 'termin_stattgefunden'];
 BEGIN
-  IF NEW.status = 'kein_interesse'
-     AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'kein_interesse')
+  IF NEW.status = ANY(terminals)
+     AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status)
   THEN
     norm := normalize_phone(NEW.phone);
     IF norm IS NOT NULL THEN
       INSERT INTO blacklist (phone, email, name, beruf, original_lead_id, reason, created_by)
-      VALUES (norm, NEW.email, NEW.name, NEW.beruf, NEW.id, 'kein_interesse', NEW.assigned_to)
+      VALUES (norm, NEW.email, NEW.name, NEW.beruf, NEW.id, NEW.status, NEW.assigned_to)
       ON CONFLICT (phone) DO NOTHING;
     END IF;
   END IF;
@@ -101,10 +113,12 @@ BEGIN
 END;
 $$;
 
+-- Alter Trigger-Name (Migration für alte Setups) + neuer einheitlicher Name
 DROP TRIGGER IF EXISTS leads_kein_interesse_to_blacklist ON public.leads;
-CREATE TRIGGER leads_kein_interesse_to_blacklist
+DROP TRIGGER IF EXISTS leads_terminal_status_to_blacklist ON public.leads;
+CREATE TRIGGER leads_terminal_status_to_blacklist
   AFTER INSERT OR UPDATE OF status ON public.leads
-  FOR EACH ROW EXECUTE FUNCTION public.upsert_blacklist_on_kein_interesse();
+  FOR EACH ROW EXECUTE FUNCTION public.upsert_blacklist_on_terminal_status();
 
 -- ── Trigger 2: Re-Import einer blacklisteten Nummer ⇒ kein_interesse ───
 -- Falls ein Lead mit blacklisteter Telefonnummer neu importiert wird
@@ -128,11 +142,12 @@ CREATE TRIGGER leads_enforce_blacklist_on_insert
   BEFORE INSERT ON public.leads
   FOR EACH ROW EXECUTE FUNCTION public.enforce_blacklist_on_lead_insert();
 
--- ── Backfill: bestehende kein_interesse-Leads übernehmen ──────
+-- ── Backfill: alle bestehenden Terminal-State-Leads übernehmen ─
+-- (kein_interesse + termin_gelegt + termin_stattgefunden)
 INSERT INTO public.blacklist (phone, email, name, beruf, original_lead_id, reason, created_by)
-SELECT normalize_phone(l.phone), l.email, l.name, l.beruf, l.id, 'kein_interesse', l.assigned_to
+SELECT normalize_phone(l.phone), l.email, l.name, l.beruf, l.id, l.status::text, l.assigned_to
 FROM public.leads l
-WHERE l.status = 'kein_interesse'
+WHERE l.status IN ('kein_interesse', 'termin_gelegt', 'termin_stattgefunden')
   AND l.phone IS NOT NULL
   AND normalize_phone(l.phone) IS NOT NULL
 ON CONFLICT (phone) DO NOTHING;

@@ -60,14 +60,17 @@ Die Funnel-Baseline-Query (`supabase/funnel-baseline.sql`) hält sich daran: Hea
 
 ---
 
-## 🚫 Blacklist (D-019) — kein_interesse ist persistent
+## 🚫 Blacklist (D-019) — Terminal-States sind persistent
 
-**Regel:** Wer einmal `kein_interesse` ist, wird nie wieder angerufen — auch nicht nach Lead-Löschung oder Re-Import.
+**Regel:** Wer in einen Terminal-Status wandert, wird nie wieder als frischer Lead behandelt — auch nicht nach Lead-Löschung oder Re-Import. Drei Auslöser:
+- `kein_interesse` (Lead hat abgelehnt)
+- `termin_gelegt` (Termin steht — kein neuer Anruf)
+- `termin_stattgefunden` (Termin gehalten — Sache ist durch)
 
 **Mechanik:**
-- DB-Trigger schreibt `kein_interesse`-Leads automatisch in `blacklist` (Key = normalisierte Telefon).
+- DB-Trigger schreibt jeden Wechsel in einen dieser drei Stati automatisch in `blacklist` (Key = normalisierte Telefon, Reason = originaler Status).
 - `blacklist` überlebt Lead-Hard-Delete (FK ON DELETE SET NULL).
-- Re-Imports einer blacklisteten Nummer bekommen sofort `status='kein_interesse'` (BEFORE-INSERT-Trigger).
+- Re-Imports einer blacklisteten Nummer bekommen sofort `status='kein_interesse'` (BEFORE-INSERT-Trigger — uniformer Marker, originaler Reason bleibt im Blacklist-Eintrag erhalten).
 - `distribute-leads` filtert Blacklist vor Round-Robin → `skippedBlacklisted`-Count in der Response.
 - Cockpit-Deck filtert Blacklist als zweite Sicherung.
 
@@ -76,7 +79,13 @@ Die Funnel-Baseline-Query (`supabase/funnel-baseline.sql`) hält sich daran: Hea
 - Setter-**Suche zeigt sie aber**, damit Rückrufer einsortierbar sind.
 - Admin: `GET /api/admin/blacklist?search=…`, `POST` zum manuellen Hinzufügen, `DELETE /api/admin/blacklist/:id` zum Entfernen (für Korrekturen).
 
-**Einmaliger Setup-Schritt:** `supabase/blacklist-setup.sql` im Supabase-SQL-Editor ausführen (Tabelle + Trigger + Backfill aller bestehenden `kein_interesse`-Leads).
+**Reihenfolge bei großer Bereinigung („alle Leads löschen + neu importieren"):**
+1. `supabase/blacklist-setup.sql` einmal in Supabase einspielen — Backfill landet alle bestehenden Terminal-State-Leads in der Blacklist.
+2. Mit `GET /api/admin/blacklist?limit=1` prüfen: `total` zeigt Anzahl der Einträge → muss > 0 sein.
+3. Erst dann: alle Leads löschen (`DELETE /api/admin/leads` mit `mode:"hard"` + `confirm:true`, oder im Admin-Board).
+4. Neuer Excel-Import — blacklistete Phones bekommen via BEFORE-INSERT-Trigger automatisch `status='kein_interesse'`, alle frischen Nummern starten als `neu`.
+
+**Einmaliger Setup-Schritt:** `supabase/blacklist-setup.sql` im Supabase-SQL-Editor ausführen. Idempotent — sicher mehrfach laufbar (CREATE IF NOT EXISTS / CREATE OR REPLACE / ON CONFLICT).
 
 ---
 
