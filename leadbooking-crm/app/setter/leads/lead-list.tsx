@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus } from '@/types'
 import { LeadSlideOver } from './lead-slide-over'
-import { Search, X, Phone } from 'lucide-react'
+import { Search, X, Phone, FolderOpen } from 'lucide-react'
 import { formatPhoneForCall } from '@/lib/phone'
 import { cleanLeadName } from '@/lib/clean-name'
 
@@ -40,6 +40,7 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   const supabase = createClient()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'alle'>('alle')
+  const [listFilter, setListFilter] = useState<string>('alle')
   const [search, setSearch] = useState('')
   const [navList, setNavList] = useState<string[]>([])
   const [navIdx, setNavIdx] = useState<number | null>(null)
@@ -57,7 +58,24 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
     return () => { supabase.removeChannel(ch) }
   }, [userId])
 
-  const searched = useMemo(() => leads.filter(l => matchesSearch(l, search)), [leads, search])
+  const getListName = (l: Lead): string => ((l as any).list_name || '').trim()
+  // Liste der vorkommenden Zielgruppen (mit Counts) für Filter-Chip-Reihe
+  const lists = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const l of leads) {
+      const n = getListName(l) || '— ohne Liste —'
+      counts[n] = (counts[n] || 0) + 1
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [leads])
+
+  const listScoped = useMemo(() => {
+    if (listFilter === 'alle') return leads
+    if (listFilter === '__none__') return leads.filter(l => !getListName(l))
+    return leads.filter(l => getListName(l) === listFilter)
+  }, [leads, listFilter])
+
+  const searched = useMemo(() => listScoped.filter(l => matchesSearch(l, search)), [listScoped, search])
   const filtered = useMemo(() => {
     // Suche zeigt immer alles (auch kein_interesse), damit Rückrufer auffindbar sind.
     if (search.trim()) {
@@ -91,6 +109,25 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
 
   return (
     <div className="space-y-4">
+      {/* Zielgruppen-Filter (zuoberst, damit Setter schnell zwischen Listen wechseln können) */}
+      {lists.length > 1 && (
+        <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E3A5F] uppercase tracking-wide px-1 self-center">
+            <FolderOpen className="w-4 h-4" /> Zielgruppe
+          </div>
+          <button onClick={() => setListFilter('alle')}
+            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+            Alle ({leads.length})
+          </button>
+          {lists.map(([name, count]) => (
+            <button key={name} onClick={() => setListFilter(name === '— ohne Liste —' ? '__none__' : name)}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${(listFilter === name) || (listFilter === '__none__' && name === '— ohne Liste —') ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+              {name} ({count})
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
