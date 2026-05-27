@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { CockpitClient } from './cockpit-client'
 import type { Lead, Profile } from '@/types'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
+import { filterBlacklistedLeads } from '@/lib/blacklist'
 
 export default async function CockpitPage() {
   const supabase = await createClient()
@@ -67,15 +68,19 @@ export default async function CockpitPage() {
   })
 
   const seen = new Set<string>()
-  const deck: Lead[] = []
+  const rawDeck: Lead[] = []
   for (const list of [wiedervorlagen, neueLeadsSorted]) {
     for (const lead of list || []) {
       if (!seen.has(lead.id)) {
         seen.add(lead.id)
-        deck.push(lead as Lead)
+        rawDeck.push(lead as Lead)
       }
     }
   }
+  // Defense in Depth: Telefonnummern, die in der Blacklist stehen
+  // (kein_interesse-Historie), werden hart rausgefiltert — selbst falls
+  // ein re-importierter Lead irgendwie als neu/angerufen ins Deck rutscht.
+  const deck = await filterBlacklistedLeads(rawDeck)
 
   return <CockpitClient initialDeck={deck} setter={profile as Profile} clusterContent={(clusterContent ?? []) as never[]} />
 }

@@ -82,6 +82,14 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true, mode })
   }
+  // D-020: geschützte Status (Termine/Wiedervorlage) nicht löschbar.
+  const { data: row, error: pErr } = await supabase.from('leads').select('status').eq('id', id).maybeSingle()
+  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 })
+  if (row && ['termin_gelegt', 'termin_stattgefunden', 'wiedervorlage'].includes((row as { status: string }).status)) {
+    return NextResponse.json({
+      error: `Lead geschützt (status=${(row as { status: string }).status}). Vor dem Löschen Status ändern.`,
+    }, { status: 409 })
+  }
   const { error } = await supabase.from('leads').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, mode })

@@ -133,6 +133,18 @@ Alle akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `A
 | `GET /api/admin/profiles[?role=&is_active=]` | Profile-Liste | Token/Session |
 | `GET /api/admin/lead-probability` | Aktuelles Sortier-Modell + Feature-Statistiken (Diagnose) | Token/Session |
 | `POST /api/admin/lead-probability` | Modell sofort neu trainieren (Cache leeren) | Token/Session |
+| `GET /api/admin/blacklist?search=&limit=&offset=` | Blacklist-Einträge (D-019) | Token/Session |
+| `POST /api/admin/blacklist` `{phone, name?, email?, beruf?, reason?}` | Manuell zur Blacklist | Token/Session |
+| `DELETE /api/admin/blacklist` `{ids?, phones?}` | Bulk-Entfernen | Token/Session |
+| `DELETE /api/admin/blacklist/:id` | Einzel-Entfernen | Token/Session |
+| `GET /api/admin/berufe` | Berufe-Master + Lead-Counts (D-021) | Token/Session |
+| `POST /api/admin/berufe` `{name, plural_form?, is_active?}` | Neuer Beruf | Token/Session |
+| `PATCH /api/admin/berufe/:name` `{rename?, plural_form?, is_active?}` | Umbenennen (Cascade auf leads.beruf) / Feld-Update | Token/Session |
+| `DELETE /api/admin/berufe/:name[?clearLeads=true]` | Beruf entfernen, optional Leads auf NULL | Token/Session |
+| `GET /api/admin/listen` | Alle Listen + Lead-Counts | Token/Session |
+| `POST /api/admin/listen` `{list_name, display_name?, firma?, …}` | Neue Liste | Token/Session |
+| `PATCH /api/admin/listen/:name` `{rename?, display_name?, firma?, …}` | Umbenennen / Branding-Update | Token/Session |
+| `DELETE /api/admin/listen/:name[?clearLeads=true]` | Liste entfernen, optional Leads auf NULL | Token/Session |
 
 **Write — Verteilung (⚠️ D-016)**
 
