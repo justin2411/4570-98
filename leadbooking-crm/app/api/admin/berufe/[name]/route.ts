@@ -75,9 +75,11 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   const supabase = createAdminClient()
   let cleared = 0
   if (clearLeads) {
+    // leads.beruf ist NOT NULL → wir setzen auf '' (Leerstring), nicht NULL.
+    // Effekt für die App identisch: alle UI/Filter behandeln '' wie "kein beruf".
     const { error: e0, count } = await supabase
       .from('leads')
-      .update({ beruf: null } as never, { count: 'exact' })
+      .update({ beruf: '' } as never, { count: 'exact' })
       .eq('beruf', name)
     if (e0) return NextResponse.json({ error: 'clear-leads: ' + e0.message }, { status: 500 })
     cleared = count ?? 0

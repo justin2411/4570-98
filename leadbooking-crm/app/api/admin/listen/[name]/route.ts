@@ -76,9 +76,10 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   const supabase = createAdminClient()
   let cleared = 0
   if (clearLeads) {
+    // leads.list_name ist NOT NULL → '' statt NULL (gleiche Semantik in der UI).
     const { error: e0, count } = await supabase
       .from('leads')
-      .update({ list_name: null } as never, { count: 'exact' })
+      .update({ list_name: '' } as never, { count: 'exact' })
       .eq('list_name', name)
     if (e0) return NextResponse.json({ error: 'clear-leads: ' + e0.message }, { status: 500 })
     cleared = count ?? 0
