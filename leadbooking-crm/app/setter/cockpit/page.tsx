@@ -7,22 +7,22 @@ import type { Lead, Profile } from '@/types'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { filterBlacklistedLeads } from '@/lib/blacklist'
 
-export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ list?: string }> }) {
+export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ beruf?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const sp = await searchParams
-  const listFilter = (sp.list || '').trim()
+  const berufFilter = (sp.beruf || '').trim()
 
   const now = new Date().toISOString()
 
-  // Optional Listen-Filter (?list=Heilpraktiker oder ?list=__none__) auf die
+  // Optional Beruf-Filter (?beruf=Heilpraktiker oder ?beruf=__none__) auf die
   // Lead-Queries anwenden, ohne die bestehende Logik zu duplizieren.
-  function applyListFilter<T extends { eq: (col: string, val: string) => any; is: (col: string, val: null) => any }>(q: T): T {
-    if (!listFilter) return q
-    if (listFilter === '__none__') return q.is('list_name', null) as T
-    return q.eq('list_name', listFilter) as T
+  function applyBerufFilter<T extends { eq: (col: string, val: string) => any; is: (col: string, val: null) => any; or: (q: string) => any }>(q: T): T {
+    if (!berufFilter) return q
+    if (berufFilter === '__none__') return q.or('beruf.is.null,beruf.eq.') as T
+    return q.eq('beruf', berufFilter) as T
   }
 
   const wiedervorlagenQ = supabase.from('leads').select('*')
@@ -43,15 +43,15 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     { data: clusterContent },
     { data: wiedervorlagen },
     { data: neueLeads },
-    { data: listAggregate },
+    { data: berufAggregate },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('cluster_content').select('*'),
-    applyListFilter(wiedervorlagenQ as any),
-    applyListFilter(neueQ as any),
-    // Counts pro Liste für die Switcher-Reihe — alle offenen Leads des
+    applyBerufFilter(wiedervorlagenQ as any),
+    applyBerufFilter(neueQ as any),
+    // Counts pro Beruf für die Switcher-Reihe — alle offenen Leads des
     // Setters, unabhängig vom aktiven Filter.
-    supabase.from('leads').select('list_name')
+    supabase.from('leads').select('beruf')
       .eq('assigned_to', user.id)
       .in('status', ['neu', 'angerufen', 'wiedervorlage']),
   ])
@@ -87,28 +87,28 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
   }
   const deck = await filterBlacklistedLeads(rawDeck)
 
-  // Available-Lists für die Switcher-Chip-Reihe
-  const listCounts: Record<string, number> = {}
-  let noListCount = 0
-  for (const row of (listAggregate || []) as Array<{ list_name: string | null }>) {
-    const n = (row.list_name || '').trim()
-    if (!n) noListCount++
-    else listCounts[n] = (listCounts[n] || 0) + 1
+  // Available-Berufe für die Switcher-Chip-Reihe
+  const berufCounts: Record<string, number> = {}
+  let noBerufCount = 0
+  for (const row of (berufAggregate || []) as Array<{ beruf: string | null }>) {
+    const n = (row.beruf || '').trim()
+    if (!n) noBerufCount++
+    else berufCounts[n] = (berufCounts[n] || 0) + 1
   }
-  const availableLists = Object.entries(listCounts)
+  const availableBerufe = Object.entries(berufCounts)
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => ({ name, count }))
-  const totalOpen = availableLists.reduce((s, l) => s + l.count, 0) + noListCount
+  const totalOpen = availableBerufe.reduce((s, l) => s + l.count, 0) + noBerufCount
 
   return (
     <CockpitClient
       initialDeck={deck}
       setter={profile as Profile}
       clusterContent={(clusterContent ?? []) as never[]}
-      availableLists={availableLists}
-      noListCount={noListCount}
+      availableBerufe={availableBerufe}
+      noBerufCount={noBerufCount}
       totalOpen={totalOpen}
-      activeList={listFilter}
+      activeBeruf={berufFilter}
     />
   )
 }
