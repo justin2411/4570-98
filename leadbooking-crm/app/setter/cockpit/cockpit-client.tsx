@@ -32,6 +32,7 @@ interface Props {
   noBerufCount?: number
   totalOpen?: number
   activeBeruf?: string
+  handyOnly?: boolean
 }
 
 type DrawerView = 'closed' | 'script' | 'objections' | 'notes'
@@ -177,7 +178,7 @@ function statusLabel(status: string): string {
   }
 }
 
-export function CockpitClient({ initialDeck, setter, clusterContent = [], availableBerufe = [], noBerufCount = 0, totalOpen = 0, activeBeruf = '' }: Props) {
+export function CockpitClient({ initialDeck, setter, clusterContent = [], availableBerufe = [], noBerufCount = 0, totalOpen = 0, activeBeruf = '', handyOnly = false }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -416,18 +417,24 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
         {(availableBerufe.length > 0 || noBerufCount > 0) && (
           <div className="flex flex-wrap gap-2 justify-center max-w-xl mb-6">
             {availableBerufe.map(({ name, count }) => (
-              <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}`}
+              <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}${handyOnly ? '&handy=true' : ''}`}
                 className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                 {name} ({count})
               </Link>
             ))}
             {noBerufCount > 0 && (
-              <Link href="/setter/cockpit?beruf=__none__"
+              <Link href={`/setter/cockpit?beruf=__none__${handyOnly ? '&handy=true' : ''}`}
                 className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                 Ohne Beruf ({noBerufCount})
               </Link>
             )}
           </div>
+        )}
+        {availableBerufe.length > 0 && (
+          <Link href={activeBeruf ? `/setter/cockpit?beruf=${encodeURIComponent(activeBeruf)}${handyOnly ? '' : '&handy=true'}` : (handyOnly ? '/setter/cockpit' : '/setter/cockpit?handy=true')}
+            className={`mb-4 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${handyOnly ? 'bg-emerald-400 text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+            📱 Nur Handys{handyOnly ? ' ✓' : ''}
+          </Link>
         )}
         <button onClick={() => router.push('/setter')} className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20">← Zurück zum Dashboard</button>
       </div>
@@ -454,22 +461,32 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
         <button onClick={toggleDark} className="p-2 -mr-2 rounded-lg active:bg-white/10" aria-label="Dark Mode umschalten">{dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
       </div>
 
-      {/* Beruf-Switcher: keine "Alle"-Option, kein Default-Highlight. Setter
-          wählt eine Zielgruppe aktiv aus. Pro Tab strikt nach beruf gefiltert. */}
+      {/* Beruf-Switcher + Handy-Filter. Kein Default-Highlight; Setter wählt
+          aktiv. Pro Tab strikt nach beruf, optional zusätzlich nur Handys. */}
       {(availableBerufe.length > 0 || noBerufCount > 0) && (
         <div className="px-3 pb-2 overflow-x-auto">
           <div className="flex gap-1.5 items-center whitespace-nowrap">
             <FolderOpen className="w-3.5 h-3.5 text-white/60 flex-shrink-0 ml-1" />
-            {availableBerufe.map(({ name, count }) => (
-              <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}`}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
-                {name} ({count})
-              </Link>
-            ))}
+            {availableBerufe.map(({ name, count }) => {
+              const href = `/setter/cockpit?beruf=${encodeURIComponent(name)}${handyOnly ? '&handy=true' : ''}`
+              return (
+                <Link key={name} href={href}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
+                  {name} ({count})
+                </Link>
+              )
+            })}
             {noBerufCount > 0 && (
-              <Link href="/setter/cockpit?beruf=__none__"
+              <Link href={`/setter/cockpit?beruf=__none__${handyOnly ? '&handy=true' : ''}`}
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
                 Ohne Beruf ({noBerufCount})
+              </Link>
+            )}
+            {activeBeruf && (
+              <Link href={`/setter/cockpit?beruf=${encodeURIComponent(activeBeruf)}${handyOnly ? '' : '&handy=true'}`}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors flex items-center gap-1 ${handyOnly ? 'bg-emerald-400 text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}
+                title="Nur Mobilfunknummern (+49 15x/16x/17x)">
+                📱 Nur Handys{handyOnly ? ' ✓' : ''}
               </Link>
             )}
           </div>
