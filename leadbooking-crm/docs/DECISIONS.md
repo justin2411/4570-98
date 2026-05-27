@@ -272,3 +272,23 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 **Wer löschen will:** Status erst explizit ändern (`kein_interesse`, oder `archived=true`). Bewusste Friktion = bewusster Eingriff.
 
 **Tradeoff:** Bulk-Löschen wird zweigleisig (offene Leads → weg, Termine/Wiedervorlagen → bleiben). Akzeptabel — Termine sind selten genug, dass die manuelle Trennung kein Aufwand ist; und wenn doch nötig, Status ändern → löschen.
+
+---
+
+## D-021 · Berufe + Listen als verwaltbare Entitäten („Struktur")
+
+**Entscheidung:** Berufe und Listen werden zu first-class entities mit eigener Admin-UI (`/admin/struktur`). Beide haben CRUD-APIs, Lead-Counts, Aktiv-Flag, optionalen Anzeigenamen. Berufe haben zusätzlich eine editierbare Plural-Form (ersetzt langfristig die hardcoded `BERUF_PLURAL`-Map in `lib/script-template.ts`).
+
+**Warum:** Vorher waren Berufe nur Free-Text-Strings auf `leads.beruf`, Listen nur `list_name`-Strings mit optionalem `cluster_content`-Eintrag. Umbenennen/Löschen war manuelle SQL-Arbeit, Plural-Verwaltung lag im Code. Mit der Struktur-UI kann der Admin:
+- Listen anlegen, umbenennen (inkl. Cascade auf `leads.list_name`), Branding/Templates editieren, deaktivieren, löschen (mit Option `leads.list_name=NULL`).
+- Berufe anlegen, umbenennen (Cascade auf `leads.beruf`), Plural-Form pflegen, deaktivieren, löschen.
+
+**Umsetzung:**
+- DB: neue Tabelle `berufe(name PK, plural_form, is_active, …)`. `cluster_content` ergänzt um `is_active` + `display_name`.
+- Trigger `upsert_beruf_master` auf `leads`: neue beruf-Werte landen automatisch in der Master-Tabelle (Excel-Import braucht kein UI-Lock).
+- APIs: `GET/POST /api/admin/berufe`, `PATCH/DELETE /api/admin/berufe/:name`, dito `/listen`.
+- UI: `/admin/struktur` — Ordner-Layout mit Karten, Suche, Modal-CRUD, Lead-Counts pro Karte. Nav-Eintrag „Struktur" zwischen „Leads" und „Inhalte".
+- `/admin/inhalte` bleibt vorerst bestehen (per-Cluster Template-Editor); langfristig könnte das in `/admin/struktur` integriert werden.
+- SQL: `supabase/struktur-setup.sql` — idempotent, einmal in Supabase einspielen, enthält Backfill aus `leads.beruf` + bekannte Plural-Formen aus dem Code.
+
+**Tradeoff:** Doppelte Wahrheit (Berufe-Master + Free-Text auf Leads) — gelöst per Trigger, der die Master-Liste auto-aktuell hält. Listen-Rename ist nicht atomar (cluster_content + leads-Update in zwei Statements), aber idempotent und für die Größenordnung unkritisch.

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, FileSpreadsheet, Trophy, LogOut, UserCog, Users, FileText } from 'lucide-react'
+import { LayoutDashboard, FileSpreadsheet, Trophy, LogOut, UserCog, Users, FileText, FolderTree } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from './logo'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 const links = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/leads', label: 'Leads', icon: FileSpreadsheet },
+  { href: '/admin/struktur', label: 'Struktur', icon: FolderTree },
   { href: '/admin/inhalte', label: 'Inhalte', icon: FileText },
   { href: '/admin/setter', label: 'Setter', icon: UserCog },
   { href: '/admin/closers', label: 'Closer', icon: Users },
