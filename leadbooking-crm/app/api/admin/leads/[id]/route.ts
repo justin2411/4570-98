@@ -16,7 +16,7 @@ const PATCHABLE_COLUMNS = new Set<string>([
   'status', 'appointment_date', 'recall_date', 'notes',
   'assigned_to', 'closer_id', 'teams_link',
   'call_attempts', 'last_call_attempt',
-  'archived',
+  'archived', 'prio_a', 'score',
 ])
 
 type RouteCtx = { params: Promise<{ id: string }> }

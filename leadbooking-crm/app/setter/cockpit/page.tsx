@@ -8,7 +8,7 @@ import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { filterBlacklistedLeads } from '@/lib/blacklist'
 import { isHandyLead } from '@/lib/handy-check'
 
-export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ beruf?: string; handy?: string }> }) {
+export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ beruf?: string; handy?: string; prio?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -16,12 +16,14 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams
   const berufFilter = (sp.beruf || '').trim()
   const handyOnly = sp.handy === 'true'
+  const prioOnly = sp.prio === 'true'
 
   const now = new Date().toISOString()
 
-  // Optional Beruf-Filter (?beruf=Heilpraktiker oder ?beruf=__none__) auf die
-  // Lead-Queries anwenden, ohne die bestehende Logik zu duplizieren.
-  function applyBerufFilter<T extends { eq: (col: string, val: string) => any; is: (col: string, val: null) => any; or: (q: string) => any }>(q: T): T {
+  // High-Potential-Tab überschreibt Beruf-Filter — Setter sieht ALLE
+  // prio_a-Leads (any beruf) statt Beruf-spezifischer Auswahl.
+  function applyScopeFilters<T extends { eq: (col: string, val: any) => any; is: (col: string, val: null) => any; or: (q: string) => any }>(q: T): T {
+    if (prioOnly) return q.eq('prio_a', true) as T
     if (!berufFilter) return q
     if (berufFilter === '__none__') return q.or('beruf.is.null,beruf.eq.') as T
     return q.eq('beruf', berufFilter) as T
@@ -46,15 +48,20 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     { data: wiedervorlagen },
     { data: neueLeads },
     { data: berufAggregate },
+    { count: prioCount },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('cluster_content').select('*'),
-    applyBerufFilter(wiedervorlagenQ as any),
-    applyBerufFilter(neueQ as any),
-    // Counts pro Beruf für die Switcher-Reihe — alle offenen Leads des
-    // Setters, unabhängig vom aktiven Filter.
+    applyScopeFilters(wiedervorlagenQ as any),
+    applyScopeFilters(neueQ as any),
+    // Counts pro Beruf — alle offenen Leads des Setters, unabhängig vom Filter.
     supabase.from('leads').select('beruf')
       .eq('assigned_to', user.id)
+      .in('status', ['neu', 'angerufen', 'wiedervorlage']),
+    // High-Potential-Count
+    supabase.from('leads').select('id', { count: 'exact', head: true })
+      .eq('assigned_to', user.id)
+      .eq('prio_a', true)
       .in('status', ['neu', 'angerufen', 'wiedervorlage']),
   ])
 
@@ -77,11 +84,12 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     return ((b as any).score || 0) - ((a as any).score || 0)
   })
 
-  // Kein Default: ohne expliziten ?beruf=X-Param bleibt das Deck leer und
-  // der Setter wählt aus der Chip-Reihe oben aktiv eine Zielgruppe.
+  // Kein Default: ohne expliziten Filter bleibt das Deck leer und der
+  // Setter wählt aus der Chip-Reihe oben aktiv eine Zielgruppe oder
+  // den High-Potential-Tab.
   const seen = new Set<string>()
   const rawDeck: Lead[] = []
-  if (berufFilter) for (const list of [wiedervorlagen, neueLeadsSorted]) {
+  if (berufFilter || prioOnly) for (const list of [wiedervorlagen, neueLeadsSorted]) {
     for (const lead of list || []) {
       if (!seen.has(lead.id)) {
         seen.add(lead.id)
@@ -111,7 +119,7 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
       // key forciert Remount bei jedem Filter-Wechsel — sonst behält
       // useState(initialDeck) den alten Deck-State und das Switching
       // hätte keinen sichtbaren Effekt.
-      key={`${berufFilter || '__alle__'}|${handyOnly ? 'h' : 'a'}`}
+      key={`${prioOnly ? 'prio' : (berufFilter || '__alle__')}|${handyOnly ? 'h' : 'a'}`}
       initialDeck={deck}
       setter={profile as Profile}
       clusterContent={(clusterContent ?? []) as never[]}
@@ -120,6 +128,8 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
       totalOpen={totalOpen}
       activeBeruf={berufFilter}
       handyOnly={handyOnly}
+      activePrio={prioOnly}
+      prioCount={prioCount ?? 0}
     />
   )
 }

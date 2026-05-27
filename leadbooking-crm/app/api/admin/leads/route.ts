@@ -20,7 +20,7 @@ const PATCHABLE_COLUMNS = new Set<string>([
   'status', 'appointment_date', 'recall_date', 'notes',
   'assigned_to', 'closer_id', 'teams_link',
   'call_attempts', 'last_call_attempt',
-  'archived',
+  'archived', 'prio_a', 'score',
 ])
 
 // ── GET ────────────────────────────────────────────────────────────────────
@@ -54,6 +54,7 @@ export async function GET(req: Request) {
   else if (assignedTo === 'any') query = query.not('assigned_to', 'is', null)
   else if (assignedTo) query = query.eq('assigned_to', assignedTo)
   if (listName) query = query.eq('list_name', listName)
+  if (url.searchParams.get('prio') === 'true') query = query.eq('prio_a', true)
   if (archivedParam === 'true') query = query.eq('archived', true)
   else if (archivedParam === 'false' || archivedParam === null) query = query.or('archived.is.null,archived.eq.false')
   if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
