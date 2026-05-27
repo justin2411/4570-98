@@ -403,12 +403,33 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
   }
 
   if (!currentLead) {
+    const isPickPrompt = !activeBeruf
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]">
-        <div className="text-6xl mb-4">🎉</div>
-        <h1 className="text-2xl font-bold text-white mb-2">Alle Leads abgearbeitet!</h1>
-        <p className="text-white/80 mb-6">Top Leistung. Komm später wieder, wenn neue Leads da sind.</p>
-        <button onClick={() => router.push('/setter')} className="px-6 py-3 rounded-xl bg-white text-[#1E3A5F] font-semibold">← Zurück zum Dashboard</button>
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]">
+        <div className="text-6xl mb-4">{isPickPrompt ? '👇' : '🎉'}</div>
+        <h1 className="text-2xl font-bold text-white mb-2">
+          {isPickPrompt ? 'Wähle eine Zielgruppe' : 'Alle Leads abgearbeitet!'}
+        </h1>
+        <p className="text-white/80 mb-6">
+          {isPickPrompt ? 'Klick unten auf einen Beruf, um zu starten.' : 'Top Leistung. Komm später wieder, wenn neue Leads da sind.'}
+        </p>
+        {(availableBerufe.length > 0 || noBerufCount > 0) && (
+          <div className="flex flex-wrap gap-2 justify-center max-w-xl mb-6">
+            {availableBerufe.map(({ name, count }) => (
+              <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}`}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                {name} ({count})
+              </Link>
+            ))}
+            {noBerufCount > 0 && (
+              <Link href="/setter/cockpit?beruf=__none__"
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                Ohne Beruf ({noBerufCount})
+              </Link>
+            )}
+          </div>
+        )}
+        <button onClick={() => router.push('/setter')} className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20">← Zurück zum Dashboard</button>
       </div>
     )
   }
@@ -433,15 +454,12 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
         <button onClick={toggleDark} className="p-2 -mr-2 rounded-lg active:bg-white/10" aria-label="Dark Mode umschalten">{dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
       </div>
 
-      {/* Beruf-Switcher: Setter wählt selbst, kein Default-Highlight bei "Alle" */}
+      {/* Beruf-Switcher: keine "Alle"-Option, kein Default-Highlight. Setter
+          wählt eine Zielgruppe aktiv aus. Pro Tab strikt nach beruf gefiltert. */}
       {(availableBerufe.length > 0 || noBerufCount > 0) && (
         <div className="px-3 pb-2 overflow-x-auto">
           <div className="flex gap-1.5 items-center whitespace-nowrap">
             <FolderOpen className="w-3.5 h-3.5 text-white/60 flex-shrink-0 ml-1" />
-            <Link href="/setter/cockpit"
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === '' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
-              Alle ({totalOpen})
-            </Link>
             {availableBerufe.map(({ name, count }) => (
               <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}`}
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>

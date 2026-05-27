@@ -75,9 +75,11 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     return ((b as any).score || 0) - ((a as any).score || 0)
   })
 
+  // Kein Default: ohne expliziten ?beruf=X-Param bleibt das Deck leer und
+  // der Setter wählt aus der Chip-Reihe oben aktiv eine Zielgruppe.
   const seen = new Set<string>()
   const rawDeck: Lead[] = []
-  for (const list of [wiedervorlagen, neueLeadsSorted]) {
+  if (berufFilter) for (const list of [wiedervorlagen, neueLeadsSorted]) {
     for (const lead of list || []) {
       if (!seen.has(lead.id)) {
         seen.add(lead.id)
