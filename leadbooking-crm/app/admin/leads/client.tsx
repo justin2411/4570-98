@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { formatPhoneForCall } from '@/lib/phone'
@@ -10,7 +11,12 @@ import { AssignModal } from './assign-modal'
 import { FixStatesModal } from './fix-states-modal'
 import { DistributeLeadsButton } from './distribute-button'
 import { Button } from '@/components/ui/button'
-import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen, Briefcase, Tag, AlertTriangle } from 'lucide-react'
+import { Upload, Search, X, Wand2, RefreshCw, Archive, ArchiveRestore, FolderOpen, Briefcase, Tag, AlertTriangle, Pencil, Trash2, Plus, ChevronDown } from 'lucide-react'
+import toast from 'react-hot-toast'
+
+type EntityKind = 'liste' | 'beruf'
+type EntityAction = 'new' | 'edit' | 'delete'
+interface EntityModalState { kind: EntityKind; action: EntityAction; name?: string }
 
 interface Setter { id: string; full_name: string; avatar_color: string }
 interface Props { initialLeads: Lead[]; setters: Setter[]; adminId: string; readyClusters?: string[] }
@@ -59,6 +65,9 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
   const [busy, setBusy] = useState(false)
   const [listFilter, setListFilter] = useState<string>('alle')
   const [berufFilter, setBerufFilter] = useState<string>('alle')
+  const [entityModal, setEntityModal] = useState<EntityModalState | null>(null)
+  const [setterDropdownOpen, setSetterDropdownOpen] = useState(false)
+  const router = useRouter()
   const [prioFilter, setPrioFilter] = useState(false)
   const [handyFilter, setHandyFilter] = useState(false)
 
@@ -241,11 +250,23 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
             Alle Listen ({leads.length})
           </button>
           {allLists.map(name => (
-            <button key={name} onClick={() => { setListFilter(name); setBerufFilter('alle'); resetLower() }}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
-              {name} ({leads.filter(l => getListName(l) === name).length})
-              {!readySet.has(name) && <span title="Kein Skript hinterlegt" className={listFilter === name ? 'text-amber-300' : 'text-amber-500'}>⚠</span>}
-            </button>
+            <div key={name} className="group relative inline-flex">
+              <button onClick={() => { setListFilter(name); setBerufFilter('alle'); resetLower() }}
+                className={`px-3 py-1.5 pr-8 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${listFilter === name ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+                {name} ({leads.filter(l => getListName(l) === name).length})
+                {!readySet.has(name) && <span title="Kein Skript hinterlegt" className={listFilter === name ? 'text-amber-300' : 'text-amber-500'}>⚠</span>}
+              </button>
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
+                <button title="Umbenennen / Bearbeiten" onClick={e => { e.stopPropagation(); setEntityModal({ kind: 'liste', action: 'edit', name }) }}
+                  className={`p-1 rounded-full ${listFilter === name ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-200 text-gray-600'}`}>
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button title="Löschen" onClick={e => { e.stopPropagation(); setEntityModal({ kind: 'liste', action: 'delete', name }) }}
+                  className={`p-1 rounded-full ${listFilter === name ? 'hover:bg-white/20 text-white' : 'hover:bg-red-100 text-red-600'}`}>
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
           ))}
           {hasUnlisted && (
             <button onClick={() => { setListFilter('__none__'); setBerufFilter('alle'); resetLower() }}
@@ -253,6 +274,10 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
               Ohne Liste ({leads.filter(l => !getListName(l)).length})
             </button>
           )}
+          <button onClick={() => setEntityModal({ kind: 'liste', action: 'new' })}
+            className="px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1 border border-dashed border-blue-300 text-blue-700 hover:bg-blue-100">
+            <Plus className="w-3.5 h-3.5" />Neue Liste
+          </button>
         </div>
       )}
 
@@ -285,7 +310,7 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
         {prioFilter && <span className="text-xs text-gray-500 self-center">Quer über alle Cluster · nur für dich (Admin) sichtbar</span>}
       </div>
 
-      {allBerufe.length > 0 && (
+      {(allBerufe.length > 0 || true) && (
         <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-xl border border-teal-100">
           <div className="flex items-center gap-1.5 text-xs font-bold text-teal-800 uppercase tracking-wide px-1 self-center">
             <Briefcase className="w-4 h-4" /> Berufe
@@ -295,10 +320,22 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
             Alle ({viewScopedLeads.length})
           </button>
           {allBerufe.map(([name, count]) => (
-            <button key={name} onClick={() => { setBerufFilter(name); resetLower() }}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${berufFilter === name ? 'bg-teal-700 text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
-              {name} ({count})
-            </button>
+            <div key={name} className="group relative inline-flex">
+              <button onClick={() => { setBerufFilter(name); resetLower() }}
+                className={`px-3 py-1.5 pr-8 rounded-full text-sm font-semibold transition-colors ${berufFilter === name ? 'bg-teal-700 text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+                {name} ({count})
+              </button>
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
+                <button title="Umbenennen / Plural setzen" onClick={e => { e.stopPropagation(); setEntityModal({ kind: 'beruf', action: 'edit', name }) }}
+                  className={`p-1 rounded-full ${berufFilter === name ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-200 text-gray-600'}`}>
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button title="Löschen" onClick={e => { e.stopPropagation(); setEntityModal({ kind: 'beruf', action: 'delete', name }) }}
+                  className={`p-1 rounded-full ${berufFilter === name ? 'hover:bg-white/20 text-white' : 'hover:bg-red-100 text-red-600'}`}>
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
           ))}
           {hasNoBeruf && (
             <button onClick={() => { setBerufFilter('__none__'); resetLower() }}
@@ -306,6 +343,10 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
               Ohne Beruf ({viewScopedLeads.filter(l => !getBeruf(l)).length})
             </button>
           )}
+          <button onClick={() => setEntityModal({ kind: 'beruf', action: 'new' })}
+            className="px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1 border border-dashed border-teal-400 text-teal-700 hover:bg-teal-100">
+            <Plus className="w-3.5 h-3.5" />Neuer Beruf
+          </button>
         </div>
       )}
 
@@ -327,13 +368,30 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
         </p>
       )}
 
-      <div className="flex gap-2 flex-wrap">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(new Set()); setStatusFilter('alle') }}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === t.id ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
-            {t.label}<span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === t.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>{t.count}</span>
-          </button>
-        ))}
+      <div className="relative">
+        <button onClick={() => setSetterDropdownOpen(o => !o)}
+          className="w-full sm:w-auto min-w-[260px] flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-gray-300 text-sm font-semibold text-gray-900 hover:bg-gray-50">
+          <span className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-gray-500">Zugewiesen an:</span>
+            <span>{tabs.find(t => t.id === activeTab)?.label ?? 'Nicht zugeteilt'}</span>
+            <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold">{tabs.find(t => t.id === activeTab)?.count ?? 0}</span>
+          </span>
+          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${setterDropdownOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {setterDropdownOpen && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setSetterDropdownOpen(false)} />
+            <div className="absolute z-40 mt-1 w-full sm:min-w-[320px] max-h-[60vh] overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg">
+              {tabs.map(t => (
+                <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(new Set()); setStatusFilter('alle'); setSetterDropdownOpen(false) }}
+                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between gap-2 ${activeTab === t.id ? 'bg-[#1E3A5F]/5 font-bold text-[#1E3A5F]' : 'text-gray-900'}`}>
+                  <span>{t.label}</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2 p-4 bg-white rounded-xl border border-gray-200">
@@ -404,6 +462,13 @@ export function AdminLeadsClient({ initialLeads, setters, adminId, readyClusters
       {assignTarget.length > 0 && <AssignModal leadIds={assignTarget} allLeads={leads} setters={setters} adminId={adminId} adminName="Admin" onClose={() => setAssignTarget([])} onAssigned={(leadIds, setterId) => { setLeads(prev => prev.map(l => leadIds.includes(l.id) ? { ...l, assigned_to: setterId } : l)); setAssignTarget([]); setSelected(new Set()) }} />}
       {listTarget.length > 0 && <AssignListModal count={listTarget.length} existingLists={allLists} busy={busy} onClose={() => setListTarget([])} onAssign={(name) => assignToList(listTarget, name)} />}
       {assignWarn && <AssignWarningModal missing={assignWarn.missing} onClose={() => setAssignWarn(null)} onConfirm={() => { const ids = assignWarn.ids; setAssignWarn(null); setAssignTarget(ids) }} />}
+      {entityModal && (
+        <EntityModal
+          state={entityModal}
+          onClose={() => setEntityModal(null)}
+          onDone={() => { setEntityModal(null); router.refresh() }}
+        />
+      )}
     </div>
   )
 }
@@ -496,6 +561,108 @@ function AssignWarningModal({ missing, onClose, onConfirm }: {
               Trotzdem zuweisen
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============== INLINE-ENTITY-MODAL (Listen/Berufe verwalten) ==============
+function EntityModal({ state, onClose, onDone }: {
+  state: EntityModalState; onClose: () => void; onDone: () => void
+}) {
+  const isListe = state.kind === 'liste'
+  const initialName = state.name ?? ''
+  const [name, setName] = useState(initialName)
+  const [secondary, setSecondary] = useState('') // display_name (Liste) bzw. plural_form (Beruf)
+  const [clearLeads, setClearLeads] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  async function run() {
+    setBusy(true)
+    try {
+      const baseUrl = isListe ? '/api/admin/listen' : '/api/admin/berufe'
+      let res: Response
+      if (state.action === 'new') {
+        const body: Record<string, unknown> = isListe
+          ? { list_name: name.trim(), display_name: secondary.trim() || undefined }
+          : { name: name.trim(), plural_form: secondary.trim() }
+        if (!name.trim()) { toast.error('Name fehlt'); setBusy(false); return }
+        res = await fetch(baseUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      } else if (state.action === 'edit') {
+        const body: Record<string, unknown> = {}
+        if (name.trim() && name.trim() !== initialName) body.rename = name.trim()
+        if (secondary.trim()) (isListe ? body.display_name = secondary.trim() : body.plural_form = secondary.trim())
+        res = await fetch(`${baseUrl}/${encodeURIComponent(initialName)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      } else {
+        const qs = clearLeads ? '?clearLeads=true' : ''
+        res = await fetch(`${baseUrl}/${encodeURIComponent(initialName)}${qs}`, { method: 'DELETE' })
+      }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(data.error || `Fehler ${res.status}`); return }
+      toast.success(state.action === 'delete' ? 'Gelöscht' : 'Gespeichert')
+      onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const title = state.action === 'new'
+    ? (isListe ? 'Neue Liste anlegen' : 'Neuen Beruf anlegen')
+    : state.action === 'edit'
+      ? `„${initialName}" bearbeiten`
+      : `„${initialName}" löschen?`
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-3">
+          <h3 className={`text-lg font-bold ${state.action === 'delete' ? 'text-red-700' : 'text-[#1E3A5F]'}`}>{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full"><X className="w-4 h-4 text-gray-500" /></button>
+        </div>
+
+        {state.action !== 'delete' && (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="text-xs font-semibold text-gray-600 mb-1 block">{isListe ? 'Listenname *' : 'Beruf (Singular) *'}</span>
+              <input value={name} onChange={e => setName(e.target.value)} autoFocus
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none" />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-gray-600 mb-1 block">{isListe ? 'Anzeigename (optional)' : 'Plural-Form'}</span>
+              <input value={secondary} onChange={e => setSecondary(e.target.value)}
+                placeholder={isListe ? 'z.B. Heilpraktiker-Cluster' : 'z.B. Heilpraktiker'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#2E75B6] focus:border-[#2E75B6] focus:outline-none" />
+            </label>
+            {state.action === 'edit' && (
+              <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
+                Umbenennen schreibt alle Leads mit dem alten Wert auf den neuen Namen um.
+              </p>
+            )}
+          </div>
+        )}
+
+        {state.action === 'delete' && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700">
+              {isListe ? 'Liste' : 'Beruf'} <span className="font-semibold">„{initialName}"</span> wird entfernt.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={clearLeads} onChange={e => setClearLeads(e.target.checked)} />
+              Zugeordnete Leads-{isListe ? 'Listen' : 'Berufe'}-Wert auf leer setzen
+            </label>
+            <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
+              Ohne Häkchen bleibt der Wert auf den Leads als Free-Text erhalten und kommt beim nächsten Trigger-Hit wieder in die Master-Liste.
+            </p>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl">Abbrechen</button>
+          <button onClick={run} disabled={busy || (state.action !== 'delete' && !name.trim())}
+            className={`px-4 py-2 text-sm text-white rounded-xl disabled:opacity-50 ${state.action === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#2E75B6] hover:bg-[#1E3A5F]'}`}>
+            {busy ? '…' : state.action === 'delete' ? 'Löschen' : 'Speichern'}
+          </button>
         </div>
       </div>
     </div>
