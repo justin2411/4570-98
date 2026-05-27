@@ -78,6 +78,10 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     const aCalls = (a as any).call_attempts || 0
     const bCalls = (b as any).call_attempts || 0
     if (aCalls !== bCalls) return aCalls - bCalls
+    // Handynummern immer zuerst — Setter-Wunsch.
+    const aH = isHandyLead(a) ? 1 : 0
+    const bH = isHandyLead(b) ? 1 : 0
+    if (aH !== bH) return bH - aH
     const aQ = probScore(a)
     const bQ = probScore(b)
     if (aQ !== bQ) return bQ - aQ
