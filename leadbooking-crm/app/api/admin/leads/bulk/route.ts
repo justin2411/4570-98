@@ -75,12 +75,14 @@ export async function POST(req: Request) {
     cleaned.push({
       name,
       phone,
-      email: (l.email || '').trim() || null,
+      // Mehrere leads-Spalten sind NOT NULL (beruf, list_name, website, …).
+      // Defensiv überall '' statt null verwenden, nur assigned_to darf NULL sein.
+      email: (l.email || '').trim(),
       state: stateNorm || (l.state || '').trim() || '',
-      beruf: beruf || null,
-      list_name: (l.list_name || '').trim() || defaultListName || null,
-      website: (l.website || '').trim() || null,
-      ort: (l.ort || '').trim() || null,
+      beruf: beruf || '',
+      list_name: (l.list_name || '').trim() || defaultListName || '',
+      website: (l.website || '').trim(),
+      ort: (l.ort || '').trim(),
       score: Number.isFinite(l.score) ? l.score : 0,
       lead_quality: (l.lead_quality || '').trim() || '',
       age_indicator: (l.age_indicator || '').trim() || '',
