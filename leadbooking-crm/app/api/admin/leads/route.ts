@@ -34,6 +34,12 @@ export async function GET(req: Request) {
   const listName = url.searchParams.get('listName')
   const search = url.searchParams.get('search')?.trim()
   const archivedParam = url.searchParams.get('archived')
+  // beruf-Filter: tolerant per ILIKE-Pattern, kann mehrfach übergeben werden.
+  //   ?beruf=heilpraktiker%        → nur Heilpraktiker-Schreibweisen
+  //   ?excludeBeruf=hebamm%        → ohne Hebammen (Singular + Plural)
+  // Mehrfach-Übergabe: include = OR, exclude = alle AND-NOT.
+  const berufLike = url.searchParams.getAll('beruf').filter(s => s.trim().length > 0)
+  const excludeBerufLike = url.searchParams.getAll('excludeBeruf').filter(s => s.trim().length > 0)
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1), 2000)
   const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0)
   const orderBy = url.searchParams.get('orderBy') || 'created_at'
@@ -45,11 +51,20 @@ export async function GET(req: Request) {
 
   if (status.length > 0) query = query.in('status', status)
   if (assignedTo === 'null' || assignedTo === '') query = query.is('assigned_to', null)
+  else if (assignedTo === 'any') query = query.not('assigned_to', 'is', null)
   else if (assignedTo) query = query.eq('assigned_to', assignedTo)
   if (listName) query = query.eq('list_name', listName)
   if (archivedParam === 'true') query = query.eq('archived', true)
   else if (archivedParam === 'false' || archivedParam === null) query = query.or('archived.is.null,archived.eq.false')
   if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+  if (berufLike.length > 0) {
+    query = query.or(berufLike.map(p => `beruf.ilike.${p}`).join(','))
+  }
+  for (const p of excludeBerufLike) {
+    // NULL-Berufe gelten als "nicht ausgeschlossen" — sonst würde
+    // .not('beruf','ilike',…) jeden Lead ohne beruf-Eintrag rauswerfen.
+    query = query.or(`beruf.not.ilike.${p},beruf.is.null`)
+  }
 
   query = query.order(orderBy, { ascending: order === 'asc' }).range(offset, offset + limit - 1)
 
