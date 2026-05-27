@@ -28,10 +28,10 @@ interface Props {
   initialDeck: Lead[]
   setter: Profile
   clusterContent?: ClusterContent[]
-  availableLists?: { name: string; count: number }[]
-  noListCount?: number
+  availableBerufe?: { name: string; count: number }[]
+  noBerufCount?: number
   totalOpen?: number
-  activeList?: string
+  activeBeruf?: string
 }
 
 type DrawerView = 'closed' | 'script' | 'objections' | 'notes'
@@ -177,7 +177,7 @@ function statusLabel(status: string): string {
   }
 }
 
-export function CockpitClient({ initialDeck, setter, clusterContent = [], availableLists = [], noListCount = 0, totalOpen = 0, activeList = '' }: Props) {
+export function CockpitClient({ initialDeck, setter, clusterContent = [], availableBerufe = [], noBerufCount = 0, totalOpen = 0, activeBeruf = '' }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -427,31 +427,31 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
           <button onClick={goBack} disabled={currentIdx === 0} className="p-2 rounded-lg active:bg-white/10 disabled:opacity-30 disabled:pointer-events-none" aria-label="Vorheriger Lead"><ChevronLeft className="w-6 h-6" /></button>
         </div>
         <div className="text-center text-xs">
-          <div className="text-white/70">Lead{activeList ? ` · ${activeList === '__none__' ? 'Ohne Liste' : activeList}` : ''}</div>
+          <div className="text-white/70">Lead{activeBeruf ? ` · ${activeBeruf === '__none__' ? 'Ohne Beruf' : activeBeruf}` : ''}</div>
           <div className="text-sm font-bold">{currentIdx + 1} / {deck.length}</div>
         </div>
         <button onClick={toggleDark} className="p-2 -mr-2 rounded-lg active:bg-white/10" aria-label="Dark Mode umschalten">{dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
       </div>
 
-      {/* Zielgruppen-Switcher: schnellzugriff auf andere Listen */}
-      {(availableLists.length > 1 || (availableLists.length === 1 && noListCount > 0) || activeList) && (
+      {/* Beruf-Switcher: Setter wählt selbst, kein Default-Highlight bei "Alle" */}
+      {(availableBerufe.length > 0 || noBerufCount > 0) && (
         <div className="px-3 pb-2 overflow-x-auto">
           <div className="flex gap-1.5 items-center whitespace-nowrap">
             <FolderOpen className="w-3.5 h-3.5 text-white/60 flex-shrink-0 ml-1" />
             <Link href="/setter/cockpit"
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${!activeList ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === '' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
               Alle ({totalOpen})
             </Link>
-            {availableLists.map(({ name, count }) => (
-              <Link key={name} href={`/setter/cockpit?list=${encodeURIComponent(name)}`}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeList === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
+            {availableBerufe.map(({ name, count }) => (
+              <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}`}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
                 {name} ({count})
               </Link>
             ))}
-            {noListCount > 0 && (
-              <Link href="/setter/cockpit?list=__none__"
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeList === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
-                Ohne Liste ({noListCount})
+            {noBerufCount > 0 && (
+              <Link href="/setter/cockpit?beruf=__none__"
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
+                Ohne Beruf ({noBerufCount})
               </Link>
             )}
           </div>

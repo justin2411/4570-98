@@ -29,34 +29,59 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient()
 
-  const [{ data: settersRaw, error: e1 }, { data: leads, error: e2 }, { data: unassigned, error: e3 }] = await Promise.all([
-    supabase.from('profiles').select('id, full_name, email').eq('role', 'setter').eq('is_active', true).order('full_name'),
-    supabase.from('leads').select('assigned_to, status').in('status', ['neu', 'angerufen']),
-    supabase.from('leads').select('list_name').is('assigned_to', null),
-  ])
+  // Paginiert laden — Supabase default-limit ist 1000 Rows. Bei 5000+ Leads
+  // würden ohne Pagination Setter-Counts komplett verschluckt.
+  async function fetchAll<T>(builder: () => any): Promise<T[]> {
+    const out: T[] = []
+    let from = 0
+    const PAGE = 1000
+    while (true) {
+      const { data, error } = await builder().range(from, from + PAGE - 1)
+      if (error) throw error
+      const rows = (data || []) as T[]
+      out.push(...rows)
+      if (rows.length < PAGE) break
+      from += PAGE
+    }
+    return out
+  }
 
-  if (e1) return NextResponse.json({ error: 'profiles: ' + e1.message }, { status: 500 })
-  if (e2) return NextResponse.json({ error: 'leads: ' + e2.message }, { status: 500 })
-  if (e3) return NextResponse.json({ error: 'unassigned: ' + e3.message }, { status: 500 })
+  let settersRaw: Array<{ id: string; full_name: string; email?: string }> = []
+  let leads: Array<{ assigned_to: string | null; status: string }> = []
+  let unassigned: Array<{ list_name: string | null }> = []
+  try {
+    const sRes = await supabase.from('profiles').select('id, full_name, email').eq('role', 'setter').eq('is_active', true).order('full_name')
+    if (sRes.error) return NextResponse.json({ error: 'profiles: ' + sRes.error.message }, { status: 500 })
+    settersRaw = (sRes.data || []) as typeof settersRaw
+
+    leads = await fetchAll<{ assigned_to: string | null; status: string }>(() =>
+      supabase.from('leads').select('assigned_to, status').in('status', ['neu', 'angerufen'])
+    )
+    unassigned = await fetchAll<{ list_name: string | null }>(() =>
+      supabase.from('leads').select('list_name').is('assigned_to', null)
+    )
+  } catch (err) {
+    return NextResponse.json({ error: 'leads: ' + (err as Error).message }, { status: 500 })
+  }
 
   const openPerSetter: Record<string, number> = {}
-  for (const l of leads || []) {
+  for (const l of leads) {
     if (l.assigned_to) openPerSetter[l.assigned_to] = (openPerSetter[l.assigned_to] || 0) + 1
   }
 
   const unassignedPerList: Record<string, number> = {}
   let unassignedTotal = 0
-  for (const l of unassigned || []) {
+  for (const l of unassigned) {
     unassignedTotal++
-    const ln = ((l as { list_name?: string }).list_name || '').trim() || '— ohne Liste —'
+    const ln = (l.list_name || '').trim() || '— ohne Liste —'
     unassignedPerList[ln] = (unassignedPerList[ln] || 0) + 1
   }
 
   return NextResponse.json({
-    setters: (settersRaw || []).map(s => ({
+    setters: settersRaw.map(s => ({
       id: s.id,
       name: s.full_name,
-      email: (s as { email?: string }).email,
+      email: s.email,
       openLeads: openPerSetter[s.id] || 0,
     })),
     unassigned: {

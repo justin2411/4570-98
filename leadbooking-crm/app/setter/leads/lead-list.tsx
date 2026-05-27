@@ -58,12 +58,12 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
     return () => { supabase.removeChannel(ch) }
   }, [userId])
 
-  const getListName = (l: Lead): string => ((l as any).list_name || '').trim()
-  // Liste der vorkommenden Zielgruppen (mit Counts) für Filter-Chip-Reihe
-  const lists = useMemo(() => {
+  const getBeruf = (l: Lead): string => ((l as any).beruf || '').trim()
+  // Berufe (mit Counts) für die Filter-Chip-Reihe — pro Tab strikt nach beruf
+  const berufe = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const l of leads) {
-      const n = getListName(l) || '— ohne Liste —'
+      const n = getBeruf(l) || '— ohne Beruf —'
       counts[n] = (counts[n] || 0) + 1
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
@@ -71,8 +71,8 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
 
   const listScoped = useMemo(() => {
     if (listFilter === 'alle') return leads
-    if (listFilter === '__none__') return leads.filter(l => !getListName(l))
-    return leads.filter(l => getListName(l) === listFilter)
+    if (listFilter === '__none__') return leads.filter(l => !getBeruf(l))
+    return leads.filter(l => getBeruf(l) === listFilter)
   }, [leads, listFilter])
 
   const searched = useMemo(() => listScoped.filter(l => matchesSearch(l, search)), [listScoped, search])
@@ -109,19 +109,21 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
 
   return (
     <div className="space-y-4">
-      {/* Zielgruppen-Filter (zuoberst, damit Setter schnell zwischen Listen wechseln können) */}
-      {lists.length > 1 && (
+      {/* Beruf-Filter (zuoberst). Pro Tab strikt nach beruf — leads ohne den
+          jeweiligen beruf tauchen NICHT auf. Kein Default-Highlight; Setter
+          klickt aktiv eine Gruppe. */}
+      {berufe.length > 0 && (
         <div className="flex flex-wrap gap-2 p-3 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E3A5F] uppercase tracking-wide px-1 self-center">
-            <FolderOpen className="w-4 h-4" /> Zielgruppe
+            <FolderOpen className="w-4 h-4" /> Beruf
           </div>
           <button onClick={() => setListFilter('alle')}
             className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${listFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
             Alle ({leads.length})
           </button>
-          {lists.map(([name, count]) => (
-            <button key={name} onClick={() => setListFilter(name === '— ohne Liste —' ? '__none__' : name)}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${(listFilter === name) || (listFilter === '__none__' && name === '— ohne Liste —') ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
+          {berufe.map(([name, count]) => (
+            <button key={name} onClick={() => setListFilter(name === '— ohne Beruf —' ? '__none__' : name)}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${(listFilter === name) || (listFilter === '__none__' && name === '— ohne Beruf —') ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>
               {name} ({count})
             </button>
           ))}
