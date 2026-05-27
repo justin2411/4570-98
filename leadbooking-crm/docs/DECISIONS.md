@@ -255,3 +255,20 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 - Admin: `GET /api/admin/blacklist` mit Search-Filter, `POST` zum manuellen Hinzufügen, `DELETE /api/admin/blacklist/:id` zum Entfernen (für Korrekturen).
 
 **Tradeoff:** Eine versehentliche `kein_interesse`-Aktion wandert sofort in die Blacklist und ist nur per Admin reversibel. Das ist gewollt — bewusste Friktion, damit nichts unbemerkt aus der Blacklist verschwindet.
+
+---
+
+## D-020 · Lösch-Schutz für Termine + Wiedervorlagen
+
+**Entscheidung:** Leads mit `status` in `{termin_gelegt, termin_stattgefunden, wiedervorlage}` können nicht hart gelöscht werden — weder per App-DELETE noch per SQL. DB-Trigger raised `restrict_violation` bei jedem `DELETE`-Versuch.
+
+**Warum:** Diese drei Stati repräsentieren aktive Verpflichtungen — vereinbarte Termine, gehaltene Termine (Closer-Übergabe), zukünftige Rückrufe. Eine pauschale „alle Leads löschen"-Aktion (z. B. vor einem frischen Excel-Import) darf diese Vereinbarungen niemals wegwerfen. Das Risiko: ein Setter hat sich Mühe mit einem Termin gemacht, und ein Bulk-Cleanup macht die Arbeit zunichte.
+
+**Umsetzung:**
+- DB-Trigger `BEFORE DELETE ON leads` → raised mit klarem Fehlertext, sobald `OLD.status` einer der drei geschützten Werte ist.
+- App-DELETE-Endpoints (`DELETE /api/admin/leads` + `/:id`) filtern geschützte Leads vorab und liefern `skippedProtected`-Count zurück (graceful Bulk-Delete statt Trigger-Exception).
+- DB-Trigger bleibt aktiv als Sicherheitsnetz — selbst direkter SQL-DELETE im Supabase-Editor wird abgefangen.
+
+**Wer löschen will:** Status erst explizit ändern (`kein_interesse`, oder `archived=true`). Bewusste Friktion = bewusster Eingriff.
+
+**Tradeoff:** Bulk-Löschen wird zweigleisig (offene Leads → weg, Termine/Wiedervorlagen → bleiben). Akzeptabel — Termine sind selten genug, dass die manuelle Trennung kein Aufwand ist; und wenn doch nötig, Status ändern → löschen.

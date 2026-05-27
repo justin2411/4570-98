@@ -149,7 +149,33 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ ok: true, mode, archived: count ?? leadIds.length })
   }
 
-  const { error, count } = await supabase.from('leads').delete({ count: 'exact' }).in('id', leadIds)
+  // Hard-Delete: geschützte Leads (termin_gelegt, termin_stattgefunden,
+  // wiedervorlage) müssen ausgeschlossen werden — sonst raised der
+  // DB-Trigger (D-020) und der ganze Batch failed. App filtert vorab,
+  // Trigger bleibt als Sicherheitsnetz aktiv.
+  const PROTECTED = ['termin_gelegt', 'termin_stattgefunden', 'wiedervorlage'] as const
+  const { data: protectedRows, error: peErr } = await supabase
+    .from('leads')
+    .select('id')
+    .in('id', leadIds)
+    .in('status', PROTECTED as unknown as string[])
+  if (peErr) return NextResponse.json({ error: 'protected-check: ' + peErr.message }, { status: 500 })
+  const protectedIds = new Set((protectedRows || []).map(r => (r as { id: string }).id))
+  const deletableIds = leadIds.filter(id => !protectedIds.has(id))
+  if (deletableIds.length === 0) {
+    return NextResponse.json({
+      ok: true, mode,
+      deleted: 0,
+      skippedProtected: protectedIds.size,
+      note: 'Alle angegebenen Leads sind geschützt (Termin/Wiedervorlage).',
+    })
+  }
+
+  const { error, count } = await supabase.from('leads').delete({ count: 'exact' }).in('id', deletableIds)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, mode, deleted: count ?? leadIds.length })
+  return NextResponse.json({
+    ok: true, mode,
+    deleted: count ?? deletableIds.length,
+    skippedProtected: protectedIds.size,
+  })
 }

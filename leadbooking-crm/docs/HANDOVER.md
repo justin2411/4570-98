@@ -80,10 +80,18 @@ Die Funnel-Baseline-Query (`supabase/funnel-baseline.sql`) hält sich daran: Hea
 - Admin: `GET /api/admin/blacklist?search=…`, `POST` zum manuellen Hinzufügen, `DELETE /api/admin/blacklist/:id` zum Entfernen (für Korrekturen).
 
 **Reihenfolge bei großer Bereinigung („alle Leads löschen + neu importieren"):**
-1. `supabase/blacklist-setup.sql` einmal in Supabase einspielen — Backfill landet alle bestehenden Terminal-State-Leads in der Blacklist.
+1. `supabase/blacklist-setup.sql` einmal in Supabase einspielen — Backfill landet alle bestehenden Terminal-State-Leads in der Blacklist + aktiviert den Lösch-Schutz (D-020).
 2. Mit `GET /api/admin/blacklist?limit=1` prüfen: `total` zeigt Anzahl der Einträge → muss > 0 sein.
 3. Erst dann: alle Leads löschen (`DELETE /api/admin/leads` mit `mode:"hard"` + `confirm:true`, oder im Admin-Board).
+   → **Termine (`termin_gelegt`, `termin_stattgefunden`) und Wiedervorlagen bleiben automatisch erhalten** (D-020, DB-Trigger). Die DELETE-Response enthält `skippedProtected`-Count.
 4. Neuer Excel-Import — blacklistete Phones bekommen via BEFORE-INSERT-Trigger automatisch `status='kein_interesse'`, alle frischen Nummern starten als `neu`.
+
+**Geschützte Status (D-020, nicht hart löschbar):**
+- `termin_gelegt` – Termin steht
+- `termin_stattgefunden` – Termin gehalten
+- `wiedervorlage` – geplanter Rückruf
+
+Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ändern (z. B. auf `kein_interesse`). Bewusste Friktion.
 
 **Einmaliger Setup-Schritt:** `supabase/blacklist-setup.sql` im Supabase-SQL-Editor ausführen. Idempotent — sicher mehrfach laufbar (CREATE IF NOT EXISTS / CREATE OR REPLACE / ON CONFLICT).
 

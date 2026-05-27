@@ -152,6 +152,31 @@ WHERE l.status IN ('kein_interesse', 'termin_gelegt', 'termin_stattgefunden')
   AND normalize_phone(l.phone) IS NOT NULL
 ON CONFLICT (phone) DO NOTHING;
 
+-- ── Trigger 3: Lösch-Schutz für wertvolle Lead-States ─────────
+-- Leads mit Status termin_gelegt, termin_stattgefunden oder
+-- wiedervorlage dürfen nicht gelöscht werden — sie repräsentieren
+-- aktive Vereinbarungen/Verpflichtungen, die durch eine Bereinigungs-
+-- Aktion ("alle Leads löschen") nicht verloren gehen dürfen.
+--
+-- Wer einen geschützten Lead wirklich löschen will, muss zuerst
+-- explizit den Status ändern (z. B. auf 'kein_interesse') — das ist
+-- bewusste Friktion.
+CREATE OR REPLACE FUNCTION public.protect_active_leads_from_delete()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.status IN ('termin_gelegt', 'termin_stattgefunden', 'wiedervorlage') THEN
+    RAISE EXCEPTION 'Lead % darf nicht gelöscht werden (status=%). Termine + Wiedervorlagen sind geschützt — vor dem Löschen Status ändern.', OLD.id, OLD.status
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS leads_protect_from_delete ON public.leads;
+CREATE TRIGGER leads_protect_from_delete
+  BEFORE DELETE ON public.leads
+  FOR EACH ROW EXECUTE FUNCTION public.protect_active_leads_from_delete();
+
 -- Hinweis: Diese Datei ist read-/idempotent, aber legt eine NEUE
 -- Tabelle an. Nur einmal initial einspielen; weitere Läufe sind
 -- harmlos (CREATE TABLE IF NOT EXISTS / CREATE OR REPLACE / ON CONFLICT).
