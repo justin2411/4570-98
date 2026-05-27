@@ -33,6 +33,8 @@ interface Props {
   totalOpen?: number
   activeBeruf?: string
   handyOnly?: boolean
+  activePrio?: boolean
+  prioCount?: number
 }
 
 type DrawerView = 'closed' | 'script' | 'objections' | 'notes'
@@ -178,7 +180,7 @@ function statusLabel(status: string): string {
   }
 }
 
-export function CockpitClient({ initialDeck, setter, clusterContent = [], availableBerufe = [], noBerufCount = 0, totalOpen = 0, activeBeruf = '', handyOnly = false }: Props) {
+export function CockpitClient({ initialDeck, setter, clusterContent = [], availableBerufe = [], noBerufCount = 0, totalOpen = 0, activeBeruf = '', handyOnly = false, activePrio = false, prioCount = 0 }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -404,7 +406,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
   }
 
   if (!currentLead) {
-    const isPickPrompt = !activeBeruf
+    const isPickPrompt = !activeBeruf && !activePrio
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#1E3A5F] to-[#2E75B6]">
         <div className="text-6xl mb-4">{isPickPrompt ? '👇' : '🎉'}</div>
@@ -412,19 +414,25 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
           {isPickPrompt ? 'Wähle eine Zielgruppe' : 'Alle Leads abgearbeitet!'}
         </h1>
         <p className="text-white/80 mb-6">
-          {isPickPrompt ? 'Klick unten auf einen Beruf, um zu starten.' : 'Top Leistung. Komm später wieder, wenn neue Leads da sind.'}
+          {isPickPrompt ? 'Klick unten auf einen Beruf oder High Potential, um zu starten.' : 'Top Leistung. Komm später wieder, wenn neue Leads da sind.'}
         </p>
-        {(availableBerufe.length > 0 || noBerufCount > 0) && (
+        {(availableBerufe.length > 0 || noBerufCount > 0 || prioCount > 0) && (
           <div className="flex flex-wrap gap-2 justify-center max-w-xl mb-6">
+            {prioCount > 0 && (
+              <Link href={`/setter/cockpit?prio=true${handyOnly ? '&handy=true' : ''}`}
+                className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${activePrio ? 'bg-amber-300 text-[#1E3A5F]' : 'bg-amber-500/30 text-white hover:bg-amber-500/50'}`}>
+                ⭐ High Potential ({prioCount})
+              </Link>
+            )}
             {availableBerufe.map(({ name, count }) => (
               <Link key={name} href={`/setter/cockpit?beruf=${encodeURIComponent(name)}${handyOnly ? '&handy=true' : ''}`}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === name && !activePrio ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                 {name} ({count})
               </Link>
             ))}
             {noBerufCount > 0 && (
               <Link href={`/setter/cockpit?beruf=__none__${handyOnly ? '&handy=true' : ''}`}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeBeruf === '__none__' && !activePrio ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                 Ohne Beruf ({noBerufCount})
               </Link>
             )}
@@ -461,29 +469,39 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
         <button onClick={toggleDark} className="p-2 -mr-2 rounded-lg active:bg-white/10" aria-label="Dark Mode umschalten">{dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
       </div>
 
-      {/* Beruf-Switcher + Handy-Filter. Kein Default-Highlight; Setter wählt
-          aktiv. Pro Tab strikt nach beruf, optional zusätzlich nur Handys. */}
-      {(availableBerufe.length > 0 || noBerufCount > 0) && (
+      {/* Beruf-Switcher + High-Potential + Handy-Filter. Kein Default-
+          Highlight; Setter wählt aktiv. Pro Tab strikt gefiltert. */}
+      {(availableBerufe.length > 0 || noBerufCount > 0 || prioCount > 0) && (
         <div className="px-3 pb-2 overflow-x-auto">
           <div className="flex gap-1.5 items-center whitespace-nowrap">
             <FolderOpen className="w-3.5 h-3.5 text-white/60 flex-shrink-0 ml-1" />
+            {prioCount > 0 && (
+              <Link href={`/setter/cockpit?prio=true${handyOnly ? '&handy=true' : ''}`}
+                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors flex items-center gap-1 ${activePrio ? 'bg-amber-300 text-[#1E3A5F]' : 'bg-amber-500/30 text-amber-100 hover:bg-amber-500/50'}`}
+                title="Nur High-Potential-Leads (A-Top)">
+                ⭐ High Potential ({prioCount})
+              </Link>
+            )}
             {availableBerufe.map(({ name, count }) => {
               const href = `/setter/cockpit?beruf=${encodeURIComponent(name)}${handyOnly ? '&handy=true' : ''}`
               return (
                 <Link key={name} href={href}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === name ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === name && !activePrio ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
                   {name} ({count})
                 </Link>
               )
             })}
             {noBerufCount > 0 && (
               <Link href={`/setter/cockpit?beruf=__none__${handyOnly ? '&handy=true' : ''}`}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === '__none__' ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${activeBeruf === '__none__' && !activePrio ? 'bg-white text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}>
                 Ohne Beruf ({noBerufCount})
               </Link>
             )}
-            {activeBeruf && (
-              <Link href={`/setter/cockpit?beruf=${encodeURIComponent(activeBeruf)}${handyOnly ? '' : '&handy=true'}`}
+            {(activeBeruf || activePrio) && (
+              <Link href={(() => {
+                const base = activePrio ? '/setter/cockpit?prio=true' : `/setter/cockpit?beruf=${encodeURIComponent(activeBeruf)}`
+                return handyOnly ? base : `${base}&handy=true`
+              })()}
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors flex items-center gap-1 ${handyOnly ? 'bg-emerald-400 text-[#1E3A5F]' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}
                 title="Nur Mobilfunknummern (+49 15x/16x/17x)">
                 📱 Nur Handys{handyOnly ? ' ✓' : ''}

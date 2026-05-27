@@ -43,6 +43,7 @@ interface IncomingLead {
   lead_quality?: string
   age_indicator?: string
   signals?: string
+  prio_a?: boolean
 }
 
 export async function POST(req: Request) {
@@ -90,6 +91,7 @@ export async function POST(req: Request) {
       status: 'neu',
       uploaded_by: uploadedBy,
       assigned_to: assignedTo,
+      ...(l.prio_a === true ? { prio_a: true } : {}),
     })
   }
 
