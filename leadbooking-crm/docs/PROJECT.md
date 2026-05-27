@@ -77,9 +77,9 @@ Rolle steht in `profiles.role`. Switch via Supabase Auth (E-Mail/Passwort).
 - **Skript & Einwände:** Im Drawer unten (📖 Skript / 💬 Einwände / 📝 Notizen). Skript ist zentral für alle Cluster, personalisiert über `{beruf}`, `{kunde_nachname}`, `{firma}` etc.
 - **Aktionen:** 4 Buttons (oder Wisch-Gesten):
   - **Termin** (↑) → öffnet TerminModal (Datum/Uhrzeit/Teams-Link) → speichert → öffnet „Termin gespeichert"-Maske
-  - **Wiedervorlage** (↓) → Datum/Uhrzeit-Auswahl, Lead kommt automatisch zurück
-  - **Nicht erreicht** (→) → setzt auto-Recall (1.Versuch: +2h, 2.: +4h, 3.+: morgen 10 Uhr)
-  - **Kein Interesse** (←) → Lead raus
+  - **Wiedervorlage** (↓) → expliziter Recall mit Datum/Uhrzeit, Lead kommt zur gewählten Zeit zurück
+  - **Nicht erreicht** (→) → **endgültig aus dem Cockpit-Deck**, kein Auto-Recall. Wenn der Setter es nochmal versuchen will: bewusst „Wiedervorlage" wählen.
+  - **Kein Interesse** (←) → endgültig aus dem Cockpit-Deck
 - **Zurück-Button** (← im Header): zur vorherigen Karte navigieren.
 - **Undo** (gelber Pill auf der Karte): nach jeder Aktion einmal die Möglichkeit, sie rückgängig zu machen.
 - **Deck-Sortierung:** Wiedervorlagen → frische (nie angerufen) sortiert nach Qualität (Handy / echter Name / weiblich / persönliche Mail) → nicht erreicht. Setter sehen die Qualität NICHT, nur die Reihenfolge.

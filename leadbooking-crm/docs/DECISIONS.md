@@ -137,6 +137,18 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 
 ---
 
+## D-016 · „Nicht erreicht" und „Kein Interesse" entfernen Leads endgültig aus dem Cockpit
+
+**Entscheidung:** Beide Aktionen blenden den Lead **dauerhaft** aus dem Cockpit-Deck aus. Kein Auto-Recall mehr für „Nicht erreicht" (`recall_date` wird auf `null` gesetzt). Wenn der Setter ein erneutes Probieren will, muss er bewusst die Aktion „Wiedervorlage" mit Datum/Uhrzeit wählen.
+
+**Warum:** Setter haben sich beschwert, dass auf „Nicht erreicht" gesetzte Leads kurz darauf wieder oben auftauchen — verwirrend und ineffizient. Der frühere Auto-Recall (+2h/+4h/morgen) lief still im Hintergrund, ohne dass der Setter es entschieden hat. Mit dieser Änderung ist die Entscheidung explizit: einmal „nicht erreicht" = aus dem Deck. „Wiedervorlage" bleibt der explizite Recall-Knopf.
+
+**Konsequenz für die DB:** `nicht_erreicht`-Leads bleiben in der DB (für Reporting/Admin sichtbar), sind aber nicht mehr im Setter-Cockpit. Können bei Bedarf vom Admin neu verteilt werden (mit `statuses: ['nicht_erreicht']` im distribute-leads-Call).
+
+**Defensive Verbesserung:** Die Status-Updates verifizieren jetzt per `.select('id')` zurück, dass wirklich eine Zeile betroffen war — silente RLS-Rejections werfen jetzt einen sichtbaren Toast (statt das Lead zurückkehren zu lassen).
+
+---
+
 ## D-015 · Read-Endpoint `GET /api/admin/setters` für Agent-Übersicht
 
 **Entscheidung:** Neben dem write-Endpoint (`distribute-leads`) gibt es einen read-Endpoint, der Setter-IDs, Namen, E-Mails sowie aktuelle Lead-Last + unzugeordnete-pro-Liste liefert.
