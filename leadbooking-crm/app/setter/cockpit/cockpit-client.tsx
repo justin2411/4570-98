@@ -190,7 +190,13 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
     return m
   }, [clusterContent])
 
-  const [deck, setDeck] = useState<Lead[]>(initialDeck)
+  // Defensives Filter: bearbeitbar im Cockpit sind ausschließlich Leads im
+  // Status neu/angerufen/wiedervorlage. nicht_erreicht / kein_interesse /
+  // termin_gelegt / termin_stattgefunden dürfen NIE im Deck landen — selbst
+  // wenn der Server-Query (z.B. wegen Stale Cache) doch was anderes liefert.
+  const isCockpitEligible = (l: Lead) =>
+    l.status === 'neu' || l.status === 'angerufen' || l.status === 'wiedervorlage'
+  const [deck, setDeck] = useState<Lead[]>(() => initialDeck.filter(isCockpitEligible))
   const [currentIdx, setCurrentIdx] = useState(0)
   const [drawer, setDrawer] = useState<DrawerView>('closed')
   const [actionModal, setActionModal] = useState<ActionType>(null)
@@ -212,6 +218,11 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
   type ActionSnapshot = {
     leadId: string
     label: string
+    // Vollständige Kopie des Leads zur Rückkehr ins Deck — terminale Actions
+    // (Nicht-Erreicht, Kein-Interesse, Termin, Wiedervorlage) entfernen den
+    // Lead aus dem Deck, Undo muss ihn an seiner alten Position wieder einsetzen.
+    lead: Lead
+    indexInDeck: number
     fields: {
       status: any
       recall_date: string | null
@@ -229,6 +240,8 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
     return {
       leadId: lead.id,
       label,
+      lead,
+      indexInDeck: currentIdx,
       fields: {
         status: lead.status,
         recall_date: anyL.recall_date ?? null,
@@ -247,9 +260,18 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
     const { error } = await supabase.from('leads').update(lastAction.fields as any).eq('id', lastAction.leadId)
     setSavingAction(false)
     if (error) { toast.error('Rückgängig fehlgeschlagen: ' + error.message); return }
-    setDeck(d => d.map(l => l.id === lastAction.leadId ? ({ ...l, ...lastAction.fields } as Lead) : l))
-    const idx = deck.findIndex(l => l.id === lastAction.leadId)
-    if (idx !== -1) setCurrentIdx(idx)
+    setDeck(d => {
+      // Bereits noch im Deck (z.B. Search-Insert)? — nur Felder zurücksetzen.
+      if (d.some(l => l.id === lastAction.leadId)) {
+        return d.map(l => l.id === lastAction.leadId ? ({ ...l, ...lastAction.fields } as Lead) : l)
+      }
+      // Sonst: an alter Position wieder einfügen.
+      const restored = { ...lastAction.lead, ...lastAction.fields } as Lead
+      const insertAt = Math.min(Math.max(0, lastAction.indexInDeck), d.length)
+      const next = [...d]; next.splice(insertAt, 0, restored)
+      return next
+    })
+    setCurrentIdx(Math.min(Math.max(0, lastAction.indexInDeck), Math.max(0, deck.length)))
     setDragOffset({ x: 0, y: 0 }); setDragging(false); setDrawer('closed'); setActionModal(null)
     toast.success(`↶ ${lastAction.label} rückgängig`)
     setLastAction(null)
@@ -343,6 +365,23 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
     }
   }
 
+  // Removes the lead from the deck (terminal action) without advancing the
+  // index — der nächste Lead rückt automatisch auf den frei gewordenen Platz.
+  // Falls dabei das Deck leer wird, zurück zur Liste.
+  function removeCurrentAndContinue() {
+    setDragOffset({ x: 0, y: 0 }); setDragging(false); setDrawer('closed')
+    setDeck(d => {
+      const next = d.filter((_, i) => i !== currentIdx)
+      if (next.length === 0) {
+        toast.success('🎉 Alle Leads abgearbeitet!')
+        router.push('/setter')
+        return d
+      }
+      return next
+    })
+    setCurrentIdx(i => Math.max(0, Math.min(i, deck.length - 2)))
+  }
+
   function goBack() {
     if (currentIdx <= 0) return
     setDragOffset({ x: 0, y: 0 }); setDragging(false); setDrawer('closed'); setActionModal(null)
@@ -371,7 +410,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
     }).eq('id', currentLead.id).select('id')
     if (error) { toast.error('Fehler: ' + error.message) }
     else if (!updated || updated.length === 0) { toast.error('⚠️ Lead konnte nicht aktualisiert werden (Zugriff verweigert?)') }
-    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch)`); setLastAction(snap); toast.success('📵 Nicht erreicht'); advanceCard() }
+    else { await logActivity(currentLead.id, 'nicht_erreicht', `Nicht erreicht (${attempts}. Versuch)`); setLastAction(snap); toast.success('📵 Nicht erreicht'); removeCurrentAndContinue() }
     setSavingAction(false)
   }
 
@@ -382,7 +421,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
     const { data: updated, error } = await supabase.from('leads').update({ status: 'kein_interesse' }).eq('id', currentLead.id).select('id')
     if (error) { toast.error('Fehler: ' + error.message) }
     else if (!updated || updated.length === 0) { toast.error('⚠️ Lead konnte nicht aktualisiert werden (Zugriff verweigert?)') }
-    else { await logActivity(currentLead.id, 'kein_interesse'); setLastAction(snap); toast.success('🚫 Kein Interesse'); advanceCard() }
+    else { await logActivity(currentLead.id, 'kein_interesse'); setLastAction(snap); toast.success('🚫 Kein Interesse'); removeCurrentAndContinue() }
     setSavingAction(false)
   }
 
@@ -698,7 +737,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
 
       {actionModal === 'termin_done' && (
         <PostTerminModal lead={currentLead} setter={setter} cluster={currentCluster} onEditEmail={() => setEditEmailOpen(true)}
-          onContinue={() => { setActionModal(null); advanceCard() }} />
+          onContinue={() => { setActionModal(null); removeCurrentAndContinue() }} />
       )}
 
       {actionModal === 'wiedervorlage' && (
@@ -709,7 +748,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
             if (error) { toast.error('Fehler: ' + error.message); return }
             await logActivity(currentLead.id, 'wiedervorlage', `Wiedervorlage am ${new Date(date).toLocaleString('de-DE')}`)
             setLastAction(snap)
-            toast.success('⏰ Wiedervorlage gespeichert'); setActionModal(null); advanceCard()
+            toast.success('⏰ Wiedervorlage gespeichert'); setActionModal(null); removeCurrentAndContinue()
           }} />
       )}
     </div>
