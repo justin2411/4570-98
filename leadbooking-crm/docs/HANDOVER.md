@@ -1,11 +1,11 @@
 # HANDOVER.md — Übergabeprotokoll
 
-**Stand:** Mai 2026 (post #47)
+**Stand:** Mai 2026 (post #51)
 **Projekt:** XI CRM (`leadbooking-crm/`) auf Next.js 14 + Supabase + Vercel
 **Repo:** `justin2411/4570-98`
 **Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.**
 **Production:** https://4570-98.vercel.app
-**Letzter Merge:** PR #47 (Paket D — tsc-Gate grün + Security)
+**Letzter Merge:** PR #51 (Termin „stattgefunden" bestätigen)
 
 ---
 
@@ -100,6 +100,19 @@ Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ände
 
 ## ✅ Was zuletzt fertig gemacht wurde
 
+**Setter-UX + Persistenz (#48–#51, Mai 2026):**
+
+- **PR #51** — Termin als **„stattgefunden" bestätigen** im Termine-Modal (+ „Nicht erschienen"). → D-032
+- **PR #50** — Cockpit merkt sich die **Deck-Position** (Lead-ID, pro Scope, localStorage). → D-031
+- **PR #49** — **Anruf-Persistenz** via `keepalive`-Fetch an `POST /api/setter/log-call` (statt fire-and-forget). → D-030
+- **PR #48** — Doku-Update (D-027/028/029 + Stand post #47).
+
+**Datenoperationen dieser Session (live, kein Code):**
+- **Ernährungsberater** importiert (1. Wahl 111 → ursprünglich 50/50 Markus/Justin; **dann alle 111 zu Markus** — Justins 55 umgezogen). 2. Wahl **611 unzugeordnet** gespeichert (Liste „Ernährungsberater 2. Wahl"), 742 ohne Telefon nicht importiert.
+- **Heilpraktiker bereinigt** (296): 211 „sicher" → Name+Bundesland aktualisiert (bleiben bei Settern); 85 „unsicher/kein Name" → hart gelöscht.
+- **Anrufliste bereinigt** (2.760): 2.684 „sicher" gleichmäßig auf die 5 (Nicholas/Markus/Robert/Antonia/Lisa) → **je ~501 aktiv**; Justin geleert; 71 „unsicher/bitte prüfen" hart gelöscht (1 geschützt übersprungen).
+- → Workflow dazu dokumentiert in **D-033**.
+
 **Aufräum-Welle A→B→C→D + Blacklist-Scharfschaltung (#42–#47, Mai 2026):**
 
 - **PR #47 — Paket D (Code-Hygiene/Security):** `tsc --noEmit` ist **0 Fehler** (tsconfig `target: ES2020`); `reset-password` nur noch für Admins; Such-Injection escaped (`sanitizeSearchTerm`); Auth zentralisiert (`setters`, `distribute-leads` → `checkAdminAuth`) + timing-safe Token. Setter-Slide-over-Call loggt jetzt auch `activity_log`.
@@ -155,20 +168,22 @@ Noch offen (optional, für diese Features):
 ### 3. Lead-Verteilung
 **Hinweis:** Die Anzeigenamen der Setter weichen von den E-Mails ab (z. B. „Lisa Becker" → natascha.lehmann@horbach.de). Ungeklärt, ob das bewusste Anruf-Pseudonyme sind — vor einer Namens-Korrektur mit dem User klären (B3, offen).
 
-Last-Snapshot post #47 (nach Verteilung der „Anrufliste"-Kampagne, beruf-balanciert):
+Last-Snapshot post #51 (nach Anrufliste-/Heilpraktiker-Bereinigung + Ernährungsberater-Umzug):
 
 | Setter (Anzeigename) | offen (neu/ang.) |
 |---|---:|
-| Lisa Becker | ~484 |
-| Markus Sander | ~481 |
-| Antonia Tischler | ~475 |
-| Nicholas Sirenko | ~474 |
-| Robert Cerbanches | ~472 |
-| Max Weiß | ~375 |
-| Justin Stich | ~249 |
+| Markus Sander | 586 (inkl. 111 Ernährungsberater 1. Wahl) |
+| Lisa Becker | 486 |
+| Robert Cerbanches | 482 |
+| Nicholas Sirenko | 476 |
+| Antonia Tischler | 470 |
+| Max Weiß | 373 |
+| Justin Stich | 116 (Anrufliste/Ernährungsberater geleert) |
 | Christian Mende | 0 🟢 |
 
-Unzugeordneter Pool ~4.988 (Psychotherapeuten/Heilpraktiker/Kosmetikerinnen/…). **326+ Blacklist-Einträge** (D-019).
+Unzugeordneter Pool ~5.595 (inkl. „Ernährungsberater 2. Wahl" 611, Kosmetikerinnen, Reste). **Blacklist** (D-019) wächst laufend.
+
+**Offene Daten-Häppchen:** „Ernährungsberater 2. Wahl" (611, Liste) wartet auf Verteilung. Justin Stich wird gerade leergezogen (User-Account).
 
 → Vor jeder (Um-)Verteilung: aktuelle Zahlen per `GET /api/admin/setters` ziehen (liefert jetzt korrekte Counts, D-028). Beruf-balanciert verteilen via Checkbox bzw. `balanceByBeruf:true` (D-029). Goldene Regel D-016 beachten — keine Verteilung ohne ausdrückliche Bestätigung im Chat.
 
@@ -176,11 +191,16 @@ Unzugeordneter Pool ~4.988 (Psychotherapeuten/Heilpraktiker/Kosmetikerinnen/…)
 
 ## 🐞 Bekannte Schwachstellen (nicht akut, dokumentiert in DECISIONS.md)
 
-| Bug | Wirkung | Fix-Aufwand |
+| Bug / Limitation | Wirkung | Fix-Aufwand |
 |---|---|---|
 | **Closer-Zuweisung vor Mail-Versand** | Wenn Mail abgebrochen, ist Closer trotzdem gesetzt | Klein: Save erst nach explizitem Senden-Klick |
+| **`ort`/`website` nicht per Admin-API patchbar** | Bei „Bereinigt"-Updates lassen sich nur `name`+`state` setzen (Whitelist) | Klein: `ort`,`website` in `PATCHABLE_COLUMNS` aufnehmen |
+| **B3: Setter-Anzeigenamen ≠ E-Mail** | „Lisa Becker" → natascha.lehmann@… — evtl. bewusste Anruf-Pseudonyme | Mit User klären, dann ggf. `PATCH profiles` |
 
 *Vorher gelistet, inzwischen behoben:*
+- ~~Anruf-Status geht bei App-Close verloren~~ — gelöst in PR #49 (D-030): keepalive-Endpoint.
+- ~~Cockpit startet beim Reopen oben~~ — gelöst in PR #50 (D-031): Position gemerkt.
+- ~~Termin nicht als „stattgefunden" bestätigbar~~ — gelöst in PR #51 (D-032).
 - ~~Back-Button zeigt stale state~~ — gelöst in PR #40 (D-026).
 - ~~Undo zählt Statistik nicht zurück~~ — gelöst in PR #46 (Paket C): Undo löscht den `activity_log`-Eintrag + dekrementiert todayDone.
 - ~~Call-Button schreibt kein activity_log~~ — gelöst in PR #46/#47: Cockpit- und Slide-over-Call loggen beim ersten Anruf `angerufen`.
