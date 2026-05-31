@@ -28,8 +28,8 @@ Drei Werkzeuge, klare Rollenverteilung.
 - Läuft in einer **Remote-Umgebung** (Cloud-Container) mit frisch geklonter Repo-Kopie.
 - Hat Zugriff auf `git`, `GitHub MCP` (PRs, Comments, Issues), Dateisystem, Bash, Node/npm.
 - Hat **keinen** direkten Zugriff auf die Produktiv-Supabase (keine DB-Credentials). Daten-Operationen → SQL für den User oder Admin-Button.
-- Entwickelt **immer** auf Branch **`claude/brave-galileo-n3x6e`**. Pull-Requests gehen gegen `main`, Squash-Merge.
-- Nach jedem Merge: Branch wird per `git reset --soft origin/main` neu aufgesetzt → nächste Änderung sauber darauf.
+- Entwickelt auf einem **Session-spezifischen** Branch (`claude/<adjective>-<scientist>-<id>`, vom Web-Harness pro Session erzeugt — z. B. `claude/adoring-rubin-HaFmI`). Pull-Requests gehen gegen `main`, Squash-Merge.
+- Nach jedem Merge wird der Dev-Branch entweder per `git reset --soft origin/main` neu aufgesetzt (selbe Session) oder es startet eine neue Session mit frischem Branch.
 
 **Typische Nutzung:**
 - „Bau Feature X" → Implementierung + PR + Merge.
@@ -100,5 +100,6 @@ Wenn ein PR Migrationen mitbringt, liegen sie als `.sql`-Datei im `supabase/`-Or
 - **PROJECT.md** — chronologisch/thematisch: was bisher gebaut wurde
 - **DECISIONS.md** — warum etwas so entschieden wurde (Architektur, UX-Tradeoffs)
 - **WORKFLOW.md** — dieses Dokument
+- **HANDOVER.md** — Übergabeprotokoll mit aktuellem Stand, letzten PRs, offenen SQL-Schritten, Setter-Last
 
 Alle drei werden bei größeren Änderungen vom Agent aktualisiert. Wenn du was ergänzt haben willst, sag einfach „aktualisier die Docs" — kein Prompt-Voodoo nötig.

@@ -1,10 +1,11 @@
 # HANDOVER.md — Übergabeprotokoll
 
-**Stand:** Mai 2026
+**Stand:** Mai 2026 (post #40)
 **Projekt:** XI CRM (`leadbooking-crm/`) auf Next.js 14 + Supabase + Vercel
-**Repo:** `justin2411/4570-98` · Dev-Branch: `claude/brave-galileo-n3x6e`
+**Repo:** `justin2411/4570-98`
+**Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.**
 **Production:** https://4570-98.vercel.app
-**Letzter Merge:** PR #22 (Komplette Anleitung in PROJECT.md)
+**Letzter Merge:** PR #40 (Cockpit: bearbeitete Leads bleiben weg — auch nach App-Neustart)
 
 ---
 
@@ -99,15 +100,27 @@ Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ände
 
 ## ✅ Was zuletzt fertig gemacht wurde
 
-- **PR #22** — Komplette Anleitung in `PROJECT.md` (Tech-Stack, Setter-/Admin-Workflow, API-Endpoints, DB-Migrations, Env-Vars)
-- **PR #21** — Zwischenstand + D-014/D-015 in Docs
-- **PR #20** — `GET /api/admin/setters` (Setter + Last + unzugeordnete-pro-Liste)
-- **PR #19** — Trim + temp. Diagnose für Token-Auth
-- **PR #18** — Trigger-Commit für Vercel-Redeploy
-- **PR #17** — Token-Auth (`ADMIN_API_TOKEN`) + `includeAssigned` für distribute-leads
-- **PR #16** — Admin-Button „Leads verteilen" + `POST /api/admin/distribute-leads`
-- **PR #15** — Erste Doku-Anlage (PROJECT/DECISIONS/WORKFLOW)
-- … (komplette Liste siehe Git-Log auf `main`)
+**Letzte Welle (#23–#40, Mai 2026):**
+
+- **PR #40** — Cockpit-Bugfix (D-026): bearbeitete Leads (nicht_erreicht / kein_interesse / Termin / Wiedervorlage) bleiben nach App-Neustart weg. Lokal aus Deck entfernt + defensives Frontend-Filter.
+- **PR #39** — Handynummern sortier-priorisiert (D-023) in Cockpit + Setter-Lead-Liste.
+- **PR #38** — High-Potential-Tab im Cockpit (D-024: `prio_a`-Flag). PATCH-Whitelist um `prio_a` erweitert.
+- **PR #37** — „📱 Nur Handys"-Filter (D-023) im Cockpit + Lead-Liste.
+- **PR #36** — Cockpit-Beruf-Switch: vollständiger Remount via React-`key`.
+- **PR #35** — Cockpit-Default-Deck leer (D-022: Setter wählt aktiv).
+- **PR #34** — Beruf-Tabs im Cockpit + `/api/admin/setters` Pagination-Fix (>1000 Profile).
+- **PR #33** — Zielgruppen-Switcher (Beruf-Chips) im Cockpit + Setter-Lead-Liste.
+- **PR #32** — `upsert_blacklist_on_terminal_status`: ENUM-Cast-Fix.
+- **PR #31** — Bulk-Import: NOT-NULL-Spalten mit `''` statt `null` (D-025-Hardening).
+- **PR #30** — `POST /api/admin/leads/bulk` (D-025: Token-fähiger Bulk-Import mit Dedupe).
+- **PR #29** — `/admin/leads`: Inline-Edit für Listen/Berufe + Setter-Dropdown.
+- **PR #28** — `clearLeads` bei Beruf-/Listen-Delete: NOT-NULL-Crash gefixt.
+- **PR #27** — Blacklist + Lösch-Schutz + Struktur-Hub (D-019 / D-020 / D-021).
+- **PR #26** — „nicht erreicht" + „kein Interesse" endgültig aus dem Cockpit (Vorläufer von D-026).
+- **PR #25** — Erweiterte Admin-API + Probability-Score + Funnel-Baseline (D-017 / D-018).
+- **PR #23** — HANDOVER.md (Übergabeprotokoll) angelegt.
+
+… komplette Historie siehe `git log` auf `main` oder Pull-Request-Liste auf GitHub.
 
 ---
 
@@ -125,19 +138,22 @@ Im Supabase-SQL-Editor ausführen:
 - Setzt activity_log, leaderboard_cache leer + alle termin_gelegt/stattgefunden zurück auf `angerufen`
 
 ### 3. Lead-Verteilung
-Aktuell **0 unzugeordnete** Leads, **988 offene** sehr ungleich verteilt:
+Aktuelle Last (Snapshot post #40, ca. 3.300 offene Leads):
+
 | Setter | Offen |
 |---|---:|
-| Justin Stich | 550 🔴 |
-| Max Weiß | 162 |
-| Lisa Becker | 111 |
-| Paul Sander | 45 |
-| Robert Cerbanches | 45 |
-| Nicholas Sirenko | 37 |
-| Antonia Tischler | 23 |
-| Christian Mende | 15 🟢 |
+| Nico Sidorenko | 748 🔴 |
+| Elias Sanetra | 602 |
+| Jonas Tamele | 462 |
+| Emma-Antonia Tischler | 445 |
+| Natascha Lehmann | 417 |
+| Lukas Rausendorf | 376 |
+| Justin Koch | 249 |
+| Christian Mende | 0 🟢 |
 
-→ Umverteilen ist sinnvoll. Entweder Admin-Button (📤 auf `/admin/leads`) oder Agent per Token-Call mit `includeAssigned: true`.
+Außerdem: **48 `prio_a=true`-Leads** (alle bei Lukas Rausendorf — kuratierte Premium-Liste, siehe D-024) · **326 Blacklist-Einträge** (D-019).
+
+→ Vor Umverteilen: aktuelle Zahlen per `GET /api/admin/setters` ziehen. Goldene Regel D-016 beachten — keine Verteilung ohne ausdrückliche Bestätigung im Chat.
 
 ---
 
@@ -148,8 +164,10 @@ Aktuell **0 unzugeordnete** Leads, **988 offene** sehr ungleich verteilt:
 | **Undo zählt Statistik nicht zurück** | Bei „Rückgängig" bleibt activity_log → Rangliste zählt Aktion weiter | Klein: Snapshot um `activityLogId` erweitern, in Undo löschen |
 | **Call-Button schreibt kein activity_log** | „Anrufe"-Zähler in Rangliste untercountet | Klein: bei Call-Tap `logActivity(lead.id, 'angerufen')` schreiben |
 | **Streak ist „distinct days"** | +5-Bonus auch bei unzusammenhängenden Tagen | Mittel: echte consecutive-Logik in DB-Trigger |
-| **Back-Button zeigt stale state** | Nach nicht_erreicht/kein_interesse + Zurück → alter Status auf der Karte | Klein: setDeck-Update in den beiden Handlern |
 | **Closer-Zuweisung vor Mail-Versand** | Wenn Mail abgebrochen, ist Closer trotzdem gesetzt | Klein: Save erst nach explizitem Senden-Klick |
+
+*Vorher gelistet, inzwischen behoben:*
+- ~~Back-Button zeigt stale state~~ — gelöst in PR #40 (D-026): bearbeitete Leads sind lokal aus dem Deck entfernt.
 
 ---
 
@@ -236,7 +254,7 @@ npx tsc --noEmit                    # Typecheck
 ## 📚 Weiterführende Dokumente
 
 - **`docs/PROJECT.md`** — komplette Feature-Liste + Bedienungsanleitung
-- **`docs/DECISIONS.md`** — Architektur-/UX-Entscheidungen mit Begründung (D-001 bis D-015)
+- **`docs/DECISIONS.md`** — Architektur-/UX-Entscheidungen mit Begründung (D-001 bis D-026)
 - **`docs/WORKFLOW.md`** — Wie Claude Chat + Claude Code + VS Code zusammenarbeiten
 
 ---
