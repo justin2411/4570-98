@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { checkAdminAuth } from '@/lib/admin-auth'
+import { checkAdminAuth, sanitizeSearchTerm } from '@/lib/admin-auth'
 import { NextResponse } from 'next/server'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import type { Lead } from '@/types'
@@ -59,7 +59,8 @@ export async function GET(req: Request) {
   if (url.searchParams.get('prio') === 'true') query = query.eq('prio_a', true)
   if (archivedParam === 'true') query = query.eq('archived', true)
   else if (archivedParam === 'false' || archivedParam === null) query = query.or('archived.is.null,archived.eq.false')
-  if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+  const safeSearch = search ? sanitizeSearchTerm(search) : ''
+  if (safeSearch) query = query.or(`name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%,phone.ilike.%${safeSearch}%`)
   if (berufLike.length > 0) {
     query = query.or(berufLike.map(p => `beruf.ilike.${p}`).join(','))
   }
