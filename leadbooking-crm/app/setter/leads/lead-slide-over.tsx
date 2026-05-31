@@ -222,21 +222,20 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
 
   function advanceOrClose() { advanceTimer.current = setTimeout(() => { if (onNext) onNext(); else onClose() }, 250) }
 
-  async function handleCallClick() {
+  function handleCallClick() {
     const newCount = (lead.call_attempts ?? 0) + 1
     const now = new Date().toISOString()
     const wasNeu = lead.status === 'neu'
     onUpdate({ ...lead, call_attempts: newCount, last_call_attempt: now, ...(wasNeu ? { status: 'angerufen' as LeadStatus } : {}) })
-    try {
-      if (wasNeu) {
-        // Erster Anruf: Status neu→angerufen + 'angerufen'-Aktivität loggen
-        // (Konsistenz mit dem Cockpit-Call-Button → Rangliste zählt Anrufe).
-        await supabase.from('leads').update({ status: 'angerufen', call_attempts: newCount, last_call_attempt: now }).eq('id', lead.id)
-        await supabase.from('activity_log').insert({ lead_id: lead.id, setter_id: userId, old_status: 'neu', new_status: 'angerufen', note: 'Angerufen' })
-      } else {
-        await supabase.rpc('increment_call_attempt', { p_lead_id: lead.id })
-      }
-    } catch { /* fire-and-forget — UI ist bereits optimistisch aktualisiert */ }
+    // Persistenz über keepalive-fetch (überlebt das Wegräumen der Seite, wenn
+    // parallel der Dialer öffnet). Serverseitig: call_attempts +1, beim ersten
+    // Anruf neu→angerufen + 'angerufen'-Aktivität (Konsistenz mit dem Cockpit).
+    fetch('/api/setter/log-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leadId: lead.id }),
+      keepalive: true,
+    }).catch(() => {})
   }
 
   async function saveNote() {

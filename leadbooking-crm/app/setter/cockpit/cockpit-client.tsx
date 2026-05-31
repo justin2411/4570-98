@@ -673,11 +673,15 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
               const patch: Record<string, unknown> = { call_attempts: attempts, last_call_attempt: new Date().toISOString() }
               if (wasNeu) patch.status = 'angerufen'
               setDeck(d => d.map((l, i) => i === currentIdx ? ({ ...l, ...patch } as Lead) : l))
-              supabase.from('leads').update(patch).eq('id', currentLead.id).then(() => {})
-              // Beim ERSTEN Anruf eine 'angerufen'-Aktivität loggen → Rangliste
-              // zählt Anrufe (vorher blieb der Zähler bei 0). wasNeu verhindert
-              // Doppelzählung bei wiederholtem Antippen desselben Leads.
-              if (wasNeu) logActivity(currentLead.id, 'angerufen', 'Angerufen')
+              // Persistenz über keepalive-fetch: überlebt das Wegräumen der Seite,
+              // wenn `tel:` parallel den Dialer öffnet (sonst ginge der Status-
+              // wechsel neu→angerufen + call_attempts + Anruf-Log verloren).
+              fetch('/api/setter/log-call', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadId: currentLead.id }),
+                keepalive: true,
+              }).catch(() => {})
             }}
             className="mt-6 flex items-center justify-center gap-3 w-full py-4 rounded-xl bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold text-lg shadow-lg">
             <Phone className="w-6 h-6" />{formattedPhone || 'Keine Nummer'}
