@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { formatPhoneForCall } from '@/lib/phone'
+import { normalizePhoneKey } from '@/lib/phone'
 import type { Lead } from '@/types'
 
 /**
@@ -22,10 +22,7 @@ let cached: { phones: Set<string>; loadedAt: number } | null = null
 let loadingPromise: Promise<Set<string>> | null = null
 
 export function normalizeForBlacklist(phone: string | null | undefined): string | null {
-  if (!phone) return null
-  const intl = formatPhoneForCall(phone)
-  if (!intl) return null
-  return intl.replace(/^\+/, '')
+  return normalizePhoneKey(phone)
 }
 
 async function loadFromDb(): Promise<Set<string>> {
@@ -72,4 +69,26 @@ export async function filterBlacklistedLeads<T extends Pick<Lead, 'phone'>>(lead
 /** Test/Diagnose: erzwingt sofortiges Reload (z. B. nach manuellem Add/Remove). */
 export function invalidateBlacklistCache(): void {
   cached = null
+}
+
+/**
+ * Lädt alle normalisierten Telefon-Keys der bestehenden (nicht gelöschten)
+ * Leads — paginiert, weil Supabase bei 1000 Zeilen deckelt. Basis für die
+ * Dublettenerkennung beim Import (zusätzlich zur Blacklist): dieselbe Nummer
+ * in anderer Schreibweise wird so trotzdem als Duplikat erkannt.
+ */
+export async function getExistingLeadPhoneKeys(): Promise<Set<string>> {
+  const supabase = createAdminClient()
+  const set = new Set<string>()
+  let from = 0
+  const page = 1000
+  while (true) {
+    const { data, error } = await supabase.from('leads').select('phone').range(from, from + page - 1)
+    if (error) throw new Error(error.message)
+    const rows = (data || []) as Array<{ phone: string | null }>
+    for (const r of rows) { const k = normalizePhoneKey(r.phone); if (k) set.add(k) }
+    if (rows.length < page) break
+    from += page
+  }
+  return set
 }

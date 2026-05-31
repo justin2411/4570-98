@@ -2,6 +2,8 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAuth } from '@/lib/admin-auth'
 import { cleanLeadName } from '@/lib/clean-name'
 import { normalizeState } from '@/lib/normalize-state'
+import { getBlacklistedPhones, getExistingLeadPhoneKeys } from '@/lib/blacklist'
+import { normalizePhoneKey } from '@/lib/phone'
 import { NextResponse } from 'next/server'
 
 /**
@@ -106,11 +108,39 @@ export async function POST(req: Request) {
   }
 
   const supabase = createAdminClient()
+
+  // ── Normalisierte Dublettenerkennung ────────────────────────────────────
+  // leads.phone hat zwar ein UNIQUE-Constraint, das greift aber nur bei
+  // BYTE-identischem Roh-String. Dieselbe Nummer in anderer Schreibweise
+  // (0151… / +49151… / 0049151…) würde sonst doppelt landen. Darum hier der
+  // Abgleich über den normalisierten Key — gegen bestehende Leads UND gegen
+  // die Blacklist (kein_interesse/Termine, überlebt Lead-Löschung). Termine
+  // und Wiedervorlagen sind per Lösch-Schutz (D-020) ohnehin als echte Leads
+  // erhalten und werden so beim Re-Import zuverlässig als Duplikat erkannt.
+  let existingKeys = new Set<string>()
+  let blacklistKeys = new Set<string>()
+  try { existingKeys = await getExistingLeadPhoneKeys() } catch { /* bei Fehler: nur Roh-UNIQUE als Netz */ }
+  try { blacklistKeys = await getBlacklistedPhones() } catch { /* Tabelle evtl. noch nicht angelegt */ }
+
+  const seenInFile = new Set<string>()
+  let skippedExisting = 0
+  let skippedBlacklisted = 0
+  let skippedDuplicateInFile = 0
+  const deduped = cleaned.filter(l => {
+    const key = normalizePhoneKey(l.phone as string)
+    if (!key) return true // ohne verwertbare Nummer nicht filtern (Roh-UNIQUE bleibt Netz)
+    if (blacklistKeys.has(key)) { skippedBlacklisted++; return false }
+    if (existingKeys.has(key)) { skippedExisting++; return false }
+    if (seenInFile.has(key)) { skippedDuplicateInFile++; return false }
+    seenInFile.add(key)
+    return true
+  })
+
   const batches: Array<{ batch: number; inserted: number; error?: string }> = []
   let totalInserted = 0
 
-  for (let i = 0; i < cleaned.length; i += BATCH_SIZE) {
-    const chunk = cleaned.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+    const chunk = deduped.slice(i, i + BATCH_SIZE)
     const batchNum = Math.floor(i / BATCH_SIZE) + 1
     const { data, error } = await supabase
       .from('leads')
@@ -131,7 +161,10 @@ export async function POST(req: Request) {
     total_received: incoming.length,
     valid: cleaned.length,
     inserted: totalInserted,
-    skipped_duplicates: cleaned.length - totalInserted,
+    skipped_duplicates: cleaned.length - totalInserted,   // gesamt (alle validen, die nicht eingefügt wurden)
+    skipped_existing: skippedExisting,                     // schon als Lead vorhanden (normalisiert)
+    skipped_blacklisted: skippedBlacklisted,               // kein_interesse/Termine (Blacklist, überlebt Löschung)
+    skipped_duplicate_in_file: skippedDuplicateInFile,     // Mehrfach in derselben Datei
     invalid_reasons: summarize(invalid),
     batches,
   })
