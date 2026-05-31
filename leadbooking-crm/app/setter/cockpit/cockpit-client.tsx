@@ -352,7 +352,10 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
       setDeck(newDeck)
     }
     setSearchQuery(''); setSearchResults([]); setDrawer('closed'); setDragOffset({ x: 0, y: 0 })
-    toast.success(`→ ${lead.name}`)
+    // Ein nicht-aktiver Lead (z.B. kein_interesse, D-019) landet NIE automatisch
+    // im Deck — nur durch bewusstes Antippen aus der Suche wird er zurückgeholt.
+    // Der Toast macht diese manuelle Rückholung transparent.
+    toast.success(isCockpitEligible(lead) ? `→ ${lead.name}` : `🔄 Zurückgeholt: ${lead.name}`)
   }
 
   function advanceCard() {

@@ -92,12 +92,27 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
     if (search.trim()) {
       return statusFilter === 'alle' ? searched : searched.filter(l => l.status === statusFilter)
     }
-    if (statusFilter === 'alle') {
-      // Default-View: kein_interesse aus der Liste raus (Blacklist, D-019).
-      return searched.filter(l => !HIDDEN_BY_DEFAULT.includes(l.status))
-    }
-    return searched.filter(l => l.status === statusFilter)
+    // Default-View (ohne Suche): Blacklist-Stati (kein_interesse, D-019) tauchen
+    // NIE auf — auch nicht über einen Status-Chip. Sie sind ausschließlich über
+    // die individuelle Suche findbar. Der Status-Filter wird auf die sichtbaren
+    // Leads angewandt, kann die ausgeblendeten also nicht hervorholen.
+    const visible = searched.filter(l => !HIDDEN_BY_DEFAULT.includes(l.status))
+    return statusFilter === 'alle' ? visible : visible.filter(l => l.status === statusFilter)
   }, [searched, statusFilter, search])
+
+  // Zähler für den "Alle"-Chip: ohne Suche werden ausgeblendete Stati nicht mitgezählt.
+  const visibleCount = useMemo(
+    () => search.trim() ? searched.length : searched.filter(l => !HIDDEN_BY_DEFAULT.includes(l.status)).length,
+    [searched, search],
+  )
+
+  // Wird die Suche geleert, während ein ausgeblendeter Status-Filter (kein_interesse)
+  // aktiv war, zurück auf "Alle" — sonst bliebe die Liste leer ohne sichtbaren Chip.
+  useEffect(() => {
+    if (!search.trim() && HIDDEN_BY_DEFAULT.includes(statusFilter as LeadStatus)) {
+      setStatusFilter('alle')
+    }
+  }, [search, statusFilter])
 
   function openLead(idx: number) {
     setNavList(filtered.map(l => l.id))
@@ -166,8 +181,11 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>Alle ({searched.length})</button>
+        <button onClick={() => setStatusFilter('alle')} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === 'alle' ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>Alle ({visibleCount})</button>
         {ALL_STATUSES.map(s => {
+          // kein_interesse (Blacklist, D-019) ist NUR während einer aktiven Suche
+          // als Filter-Chip verfügbar — sonst gäbe es eine Massen-Liste ohne Suche.
+          if (!search.trim() && HIDDEN_BY_DEFAULT.includes(s)) return null
           const count = searched.filter(l => l.status === s).length
           if (count === 0) return null
           return <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusFilter === s ? 'bg-[#1E3A5F] text-white' : 'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50'}`}>{STATUS_LABELS[s]} ({count})</button>
