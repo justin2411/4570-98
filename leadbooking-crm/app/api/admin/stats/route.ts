@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAuth } from '@/lib/admin-auth'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { NextResponse } from 'next/server'
 
 /**
@@ -33,13 +34,20 @@ export async function GET(req: Request) {
   const groups: GroupKey[] = groupParam.length > 0 ? groupParam : ['status', 'assigned_to', 'list_name']
 
   const supabase = createAdminClient()
-  let q = supabase.from('leads').select('status, assigned_to, list_name, archived')
-  if (listName) q = q.eq('list_name', listName)
-  if (!includeArchived) q = q.or('archived.is.null,archived.eq.false')
-  const { data, error } = await q
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const rows = (data || []) as Array<Record<GroupKey, unknown>>
+  // Vollständig paginiert (stabil nach id) — sonst würden Aggregate über
+  // nur 1000 Leads gerechnet (PostgREST-Deckel) und die Zahlen wären falsch.
+  let rows: Array<Record<GroupKey, unknown>>
+  try {
+    rows = await fetchAllRows<Record<GroupKey, unknown>>((from, to) => {
+      let q = supabase.from('leads').select('status, assigned_to, list_name, archived')
+        .order('id', { ascending: true }).range(from, to)
+      if (listName) q = q.eq('list_name', listName)
+      if (!includeArchived) q = q.or('archived.is.null,archived.eq.false')
+      return q
+    })
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+  }
   const buckets: Record<string, { count: number } & Partial<Record<GroupKey, unknown>>> = {}
   for (const r of rows) {
     const key = groups.map(g => String(r[g] ?? '∅')).join('|')

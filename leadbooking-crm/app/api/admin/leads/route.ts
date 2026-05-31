@@ -40,7 +40,9 @@ export async function GET(req: Request) {
   // Mehrfach-Übergabe: include = OR, exclude = alle AND-NOT.
   const berufLike = url.searchParams.getAll('beruf').filter(s => s.trim().length > 0)
   const excludeBerufLike = url.searchParams.getAll('excludeBeruf').filter(s => s.trim().length > 0)
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1), 2000)
+  // Max 1000: PostgREST deckelt jede Antwort ohnehin bei 1000 Zeilen.
+  // Für mehr → paginieren (offset) statt ein höheres Limit erwarten.
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1), 1000)
   const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0)
   const orderBy = url.searchParams.get('orderBy') || 'created_at'
   const order = (url.searchParams.get('order') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc'
