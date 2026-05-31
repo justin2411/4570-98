@@ -16,12 +16,18 @@ import type { Lead } from '@/types'
  *   perSetterLimit?:  number      // optional — max. pro Setter
  *   includeAssigned?: boolean     // optional — auch bereits zugewiesene neu verteilen ("umstrukturieren")
  *   statuses?:        string[]    // optional — Status-Filter (default: ['neu','angerufen'])
+ *   balanceByBeruf?:  boolean     // optional — pro Beruf gleichmäßig verteilen (jeder Setter bekommt
+ *                                 //            denselben Mix aller Berufe statt nur global round-robin)
+ *   excludeBeruf?:    string[]    // optional — Beruf-ILIKE-Pattern ausschließen
+ *                                 //            (default ['hebamm%'] → Hebammen-Freeze; [] = nichts ausschließen)
  * }
  *
  * Verteilung: nach Probability-Score (gelernt aus termin_gelegt-Historie)
- * sortiert, Round-Robin auf die setterIds.
+ * sortiert, Round-Robin auf die setterIds. Mit balanceByBeruf wird pro
+ * Beruf-Gruppe rotiert, sodass jeder Setter einen ähnlichen Beruf-Mix erhält.
  */
 const DEFAULT_STATUSES = ['neu', 'angerufen']
+const DEFAULT_EXCLUDE_BERUF = ['hebamm%']   // Hebammen-Freeze (HANDOVER) — per excludeBeruf:[] abschaltbar
 
 export async function POST(req: Request) {
   // ── Auth: Token ODER Session ──────────────────────────────────────────
@@ -58,6 +64,11 @@ export async function POST(req: Request) {
   const statuses: string[] = Array.isArray(body.statuses) && body.statuses.length > 0
     ? body.statuses.filter((s: unknown) => typeof s === 'string')
     : DEFAULT_STATUSES
+  const balanceByBeruf: boolean = body.balanceByBeruf === true
+  // excludeBeruf: explizit übergebenes Array gewinnt (auch []), sonst Hebammen-Freeze.
+  const excludeBeruf: string[] = Array.isArray(body.excludeBeruf)
+    ? body.excludeBeruf.filter((s: unknown) => typeof s === 'string' && s.trim().length > 0)
+    : DEFAULT_EXCLUDE_BERUF
 
   if (setterIds.length === 0) {
     return NextResponse.json({ error: 'Keine Setter ausgewählt' }, { status: 400 })
@@ -75,6 +86,8 @@ export async function POST(req: Request) {
       if (!includeAssigned) q = q.is('assigned_to', null)
       if (statuses.length > 0) q = q.in('status', statuses)
       if (listName) q = q.eq('list_name', listName)
+      // Beruf-Ausschluss (z. B. Hebammen-Freeze). NULL-Berufe bleiben drin.
+      for (const pat of excludeBeruf) q = q.or(`beruf.not.ilike.${pat},beruf.is.null`)
       return q
     })
   } catch (err) {
@@ -95,15 +108,39 @@ export async function POST(req: Request) {
   const probScore = await getLeadProbabilityScorer()
   leads.sort((a, b) => probScore(b) - probScore(a))
 
-  // Round-Robin
+  const n = setterIds.length
+  const perCap = perSetterLimit > 0 ? perSetterLimit : Infinity
   const assignments: Record<string, string[]> = {}
   for (const sid of setterIds) assignments[sid] = []
 
-  const cap = perSetterLimit > 0 ? perSetterLimit * setterIds.length : leads.length
-  const slice = leads.slice(0, cap)
-  slice.forEach((lead, i) => {
-    assignments[setterIds[i % setterIds.length]].push(lead.id)
-  })
+  // Reihenfolge der zu verteilenden Gruppen festlegen.
+  //  - balanceByBeruf: pro Beruf eine Gruppe (Score-Reihenfolge bleibt erhalten)
+  //  - sonst: eine einzige Gruppe (klassisches globales Round-Robin)
+  const groups: Lead[][] = balanceByBeruf
+    ? Object.values(leads.reduce((acc, l) => {
+        const b = ((l as any).beruf || '∅').trim() || '∅'
+        ;(acc[b] ||= []).push(l)
+        return acc
+      }, {} as Record<string, Lead[]>))
+    : [leads]
+
+  // Fortlaufender Rotations-Zeiger über ALLE Gruppen hinweg → jeder Setter
+  // bekommt einen fairen Anteil JEDER Beruf-Gruppe und die Gesamtsummen
+  // bleiben balanciert. Setter, die ihr perSetterLimit erreicht haben,
+  // werden übersprungen.
+  let ptr = 0
+  let assignedTotal = 0
+  outer: for (const group of groups) {
+    for (const lead of group) {
+      let tries = 0
+      while (assignments[setterIds[ptr % n]].length >= perCap) {
+        ptr++; tries++
+        if (tries >= n) break outer   // alle Setter voll
+      }
+      assignments[setterIds[ptr % n]].push(lead.id)
+      ptr++; assignedTotal++
+    }
+  }
 
   // Bulk-Update
   const results: Record<string, number> = {}
@@ -118,9 +155,9 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    total: slice.length,
+    total: assignedTotal,
     assigned: results,
     skippedBlacklisted,
-    scope: { includeAssigned, statuses, listName, perSetterLimit },
+    scope: { includeAssigned, statuses, listName, perSetterLimit, balanceByBeruf, excludeBeruf },
   })
 }

@@ -16,6 +16,7 @@ export function DistributeLeadsButton({
   const [selectedSetters, setSelectedSetters] = useState<string[]>([])
   const [listFilter, setListFilter] = useState<string>('')
   const [limit, setLimit] = useState<string>('')
+  const [balanceByBeruf, setBalanceByBeruf] = useState(true)
   const [running, setRunning] = useState(false)
 
   function toggleSetter(id: string) {
@@ -33,6 +34,7 @@ export function DistributeLeadsButton({
           setterIds: selectedSetters,
           listName: listFilter || undefined,
           perSetterLimit: limit ? Number(limit) : undefined,
+          balanceByBeruf,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -99,6 +101,14 @@ export function DistributeLeadsButton({
                 placeholder="z.B. 50 — leer = alle aufteilen"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
+
+            <label className="flex items-start gap-2 text-sm cursor-pointer bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-2.5">
+              <input type="checkbox" checked={balanceByBeruf} onChange={e => setBalanceByBeruf(e.target.checked)} className="mt-0.5" />
+              <span className="text-gray-800">
+                <span className="font-semibold">Pro Beruf gleichmäßig verteilen</span>
+                <span className="block text-xs text-gray-500">Jeder Setter bekommt denselben Mix aller Berufe (z. B. Psychotherapeuten + Heilpraktiker), nicht nur global reihum. Hebammen sind ausgenommen (Freeze).</span>
+              </span>
+            </label>
 
             <div className="flex gap-2 pt-2">
               <button onClick={() => setOpen(false)} disabled={running}
