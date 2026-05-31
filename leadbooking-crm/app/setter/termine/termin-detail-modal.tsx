@@ -88,6 +88,33 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
     onClose()
   }
 
+  async function markStattgefunden() {
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('leads')
+      .update({ status: 'termin_stattgefunden' })
+      .eq('id', lead.id)
+      .select('id')
+    if (error) { toast.error('Fehler: ' + error.message); setSaving(false); return }
+    if (!data || data.length === 0) { toast.error('⚠️ Konnte nicht gespeichert werden (Zugriff verweigert?)'); setSaving(false); return }
+    const { error: actErr } = await supabase.from('activity_log').insert({
+      lead_id: lead.id,
+      setter_id: setter.id,
+      old_status: 'termin_gelegt',
+      new_status: 'termin_stattgefunden',
+      note: 'Termin hat stattgefunden',
+    })
+    if (actErr) {
+      console.error('[activity_log] Insert fehlgeschlagen:', actErr)
+      toast.error('⚠️ Aktivität nicht getrackt: ' + actErr.message)
+    }
+    toast.success('✅ Termin als stattgefunden markiert')
+    // Seite lädt nur termin_gelegt → aus der To-do-Liste nehmen.
+    if (onDelete) onDelete()
+    setSaving(false)
+    onClose()
+  }
+
   // Verfügbare Templates (alle die zur lead-Situation passen)
   const allWaTemplates = WHATSAPP_TEMPLATES.filter(t => t.condition(lead))
   const allEmailTemplates = EMAIL_TEMPLATES.filter(t => t.condition(lead))
@@ -186,6 +213,35 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
                   </div>
                 </div>
               )}
+
+              {/* Termin-Ergebnis */}
+              <div className="border-t border-gray-200 pt-4 space-y-2">
+                <div className="text-xs font-semibold text-gray-500 uppercase mb-1">✅ Termin-Ergebnis</div>
+
+                <button
+                  onClick={markStattgefunden}
+                  disabled={saving}
+                  className="w-full p-3 rounded-xl bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-semibold text-sm flex items-center gap-3 disabled:opacity-50 transition-colors text-left"
+                >
+                  <span className="text-lg shrink-0">✅</span>
+                  <div className="flex-1">
+                    <div>Termin hat stattgefunden</div>
+                    <div className="text-xs font-normal text-green-50">Beratung wurde durchgeführt — Termin abschließen</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setView('cancel')}
+                  disabled={saving}
+                  className="w-full p-3 rounded-xl border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 transition-colors text-left"
+                >
+                  <span className="text-lg shrink-0">❌</span>
+                  <div className="flex-1">
+                    <div className="font-medium text-sm text-gray-900">Nicht erschienen / abgesagt</div>
+                    <div className="text-xs text-gray-500">Wiedervorlage oder kein Interesse wählen</div>
+                  </div>
+                </button>
+              </div>
 
               {/* Aktionen */}
               <div className="border-t border-gray-200 pt-4 space-y-2">
