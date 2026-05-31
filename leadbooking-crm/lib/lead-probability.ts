@@ -29,6 +29,7 @@ import { leadQualityScore, leadAgeYears } from '@/lib/lead-quality'
 import type { Lead } from '@/types'
 import { formatPhoneForCall, isRealWebsite } from '@/lib/phone'
 import { cleanLeadName } from '@/lib/clean-name'
+import { ageProxyBand } from '@/lib/age-proxy'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 // --- Konstanten ---
@@ -59,6 +60,7 @@ type Features = {
   has_full_name: 'yes' | 'no'
   has_website: 'yes' | 'no'
   age_band: '29_45' | 'near' | 'other' | 'unknown'
+  age_proxy: 'younger' | 'older' | 'neutral'
 }
 
 type FeatureKey = keyof Features
@@ -67,7 +69,7 @@ const FEATURE_KEYS: FeatureKey[] = [
   'beruf', 'list_name', 'state',
   'has_mobile', 'has_personal_email', 'is_female_name',
   'has_free_provider_email', 'has_full_name',
-  'has_website', 'age_band',
+  'has_website', 'age_band', 'age_proxy',
 ]
 
 function extractFeatures(lead: Lead): Features {
@@ -111,6 +113,7 @@ function extractFeatures(lead: Lead): Features {
     has_full_name: has_full_name ? 'yes' : 'no',
     has_website: has_website ? 'yes' : 'no',
     age_band,
+    age_proxy: ageProxyBand(lead),
   }
 }
 
