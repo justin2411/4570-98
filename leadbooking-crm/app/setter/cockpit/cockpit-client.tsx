@@ -306,6 +306,29 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
   const currentLead = deck[currentIdx]
   const currentCluster = currentLead ? (clusterMap[getListName(currentLead)] || null) : null
 
+  // ── Deck-Position merken (pro Setter + Zielgruppen-Scope) ──────────────
+  // Beim erneuten Öffnen genau dort weitermachen, wo der Setter war. Wir
+  // merken die LEAD-ID (nicht den Index — das Deck wird serverseitig neu
+  // gebaut, Reihenfolge/Inhalt können sich ändern). Ist der Lead inzwischen
+  // bearbeitet (nicht mehr im Deck), starten wir oben.
+  const posKey = `cockpit-pos:${setter.id}:${activePrio ? 'prio' : (activeBeruf || '_all_')}:${handyOnly ? 'h' : 'a'}`
+  const posRestored = useRef(false)
+  useEffect(() => {
+    if (posRestored.current || typeof window === 'undefined') return
+    posRestored.current = true
+    const savedId = window.localStorage.getItem(posKey)
+    if (!savedId) return
+    const idx = deck.findIndex(l => l.id === savedId)
+    if (idx > 0) setCurrentIdx(idx)
+    // nur einmal beim Mount — Deck ist hier der frisch geladene initialDeck
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const cur = deck[currentIdx]
+    if (cur) window.localStorage.setItem(posKey, cur.id)
+  }, [currentIdx, deck, posKey])
+
   useEffect(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     supabase.from('activity_log').select('id', { count: 'exact', head: true })
