@@ -24,7 +24,7 @@ export function ProfileForm({ profile }: Props) {
   const [useCustom, setUseCustom] = useState(profile.use_custom_signature || false)
   const [customSignature, setCustomSignature] = useState(profile.custom_signature || '')
   const [customTemplates, setCustomTemplates] = useState<CustomTemplates>(
-    (profile.custom_templates as CustomTemplates) || {}
+    (profile.custom_templates as unknown as CustomTemplates) || {}
   )
   const [dailyGoal, setDailyGoal] = useState(profile.daily_goal ?? 10)
   const [soundEnabled, setSoundEnabled] = useState(profile.sound_enabled ?? true)

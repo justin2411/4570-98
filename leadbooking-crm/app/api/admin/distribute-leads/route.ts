@@ -1,4 +1,5 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { checkAdminAuth } from '@/lib/admin-auth'
 import { NextResponse } from 'next/server'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { filterBlacklistedLeads } from '@/lib/blacklist'
@@ -30,24 +31,9 @@ const DEFAULT_STATUSES = ['neu', 'angerufen']
 const DEFAULT_EXCLUDE_BERUF = ['hebamm%']   // Hebammen-Freeze (HANDOVER) — per excludeBeruf:[] abschaltbar
 
 export async function POST(req: Request) {
-  // ── Auth: Token ODER Session ──────────────────────────────────────────
-  const authHeader = req.headers.get('authorization') || ''
-  const provided = (authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '').trim()
-  const expected = (process.env.ADMIN_API_TOKEN || '').trim()
-  const tokenOk = !!provided && !!expected && provided === expected
-
-  let sessionOk = false
-  if (!tokenOk) {
-    const supabaseUser = await createClient()
-    const { data: { user } } = await supabaseUser.auth.getUser()
-    if (user) {
-      const { data: profile } = await supabaseUser.from('profiles').select('role').eq('id', user.id).single()
-      sessionOk = profile?.role === 'admin'
-    }
-  }
-  if (!tokenOk && !sessionOk) {
-    return NextResponse.json({ error: 'Nicht berechtigt' }, { status: 401 })
-  }
+  // ── Auth: Token ODER Admin-Session (zentral) ──────────────────────────
+  const auth = await checkAdminAuth(req)
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
   // ── Body parsen ───────────────────────────────────────────────────────
   const body = await req.json().catch(() => ({}))

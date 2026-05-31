@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { checkAdminAuth } from '@/lib/admin-auth'
+import { checkAdminAuth, sanitizeSearchTerm } from '@/lib/admin-auth'
 import { invalidateBlacklistCache, normalizeForBlacklist } from '@/lib/blacklist'
 import { NextResponse } from 'next/server'
 
@@ -25,9 +25,10 @@ export async function GET(req: Request) {
   const supabase = createAdminClient()
   let query = supabase.from('blacklist').select('*', { count: 'exact' })
   if (search) {
+    const safe = sanitizeSearchTerm(search)
     const digits = search.replace(/\D/g, '')
     const phoneClause = digits ? `,phone.ilike.%${digits}%` : ''
-    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%${phoneClause}`)
+    if (safe || digits) query = query.or(`name.ilike.%${safe}%,email.ilike.%${safe}%${phoneClause}`)
   }
   query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
 
