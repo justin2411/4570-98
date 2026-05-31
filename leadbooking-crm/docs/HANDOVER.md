@@ -1,11 +1,11 @@
 # HANDOVER.md — Übergabeprotokoll
 
-**Stand:** Mai 2026 (post #40)
+**Stand:** Mai 2026 (post #47)
 **Projekt:** XI CRM (`leadbooking-crm/`) auf Next.js 14 + Supabase + Vercel
 **Repo:** `justin2411/4570-98`
 **Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.**
 **Production:** https://4570-98.vercel.app
-**Letzter Merge:** PR #40 (Cockpit: bearbeitete Leads bleiben weg — auch nach App-Neustart)
+**Letzter Merge:** PR #47 (Paket D — tsc-Gate grün + Security)
 
 ---
 
@@ -100,7 +100,16 @@ Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ände
 
 ## ✅ Was zuletzt fertig gemacht wurde
 
-**Letzte Welle (#23–#40, Mai 2026):**
+**Aufräum-Welle A→B→C→D + Blacklist-Scharfschaltung (#42–#47, Mai 2026):**
+
+- **PR #47 — Paket D (Code-Hygiene/Security):** `tsc --noEmit` ist **0 Fehler** (tsconfig `target: ES2020`); `reset-password` nur noch für Admins; Such-Injection escaped (`sanitizeSearchTerm`); Auth zentralisiert (`setters`, `distribute-leads` → `checkAdminAuth`) + timing-safe Token. Setter-Slide-over-Call loggt jetzt auch `activity_log`.
+- **PR #46 — Paket C (Setter-Bedienung):** Cockpit-Index-Off-by-one bei Undo/Entfernen behoben; Schreibbestätigung (`.select('id')`) für Termin/Wiedervorlage; Call-Button schreibt `activity_log` (Rangliste zählt Anrufe); **Undo zählt Statistik zurück** (löscht activity_log + dekrementiert todayDone).
+- **PR #45 — Paket B (Admin-Bedienung):** beruf-balancierte Verteilung (`balanceByBeruf`) + serverseitiger Hebammen-Freeze (`excludeBeruf` default `hebamm%`); Excel-Vorschau schlüsselt Duplikate auf (schon im System vs Blacklist). → D-029
+- **PR #44 — Paket A (Verlässlichkeit):** 1000-Zeilen-Deckel behoben — `fetchAllRows` (stabil nach id) in `stats`/`distribute-leads`/`lead-probability`. → D-028
+- **PR #43** — Normalisierte Dublettenerkennung im Import (Excel + Bulk), gegen bestehende Leads + Blacklist. → D-027
+- **PR #42** — `kein_interesse`-Leads nur noch per individueller Suche findbar (Lead-Liste-Status-Chip entfernt; Cockpit-Rückhol-Toast).
+
+**Vorherige Welle (#23–#40):**
 
 - **PR #40** — Cockpit-Bugfix (D-026): bearbeitete Leads (nicht_erreicht / kein_interesse / Termin / Wiedervorlage) bleiben nach App-Neustart weg. Lokal aus Deck entfernt + defensives Frontend-Filter.
 - **PR #39** — Handynummern sortier-priorisiert (D-023) in Cockpit + Setter-Lead-Liste.
@@ -129,31 +138,39 @@ Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ände
 ### 1. Supabase-SQL einspielen (einmalig, idempotent)
 Im Supabase-SQL-Editor ausführen:
 
+- ✅ **`supabase/blacklist-setup.sql`** — **eingespielt** (Mai 2026, 326 Blacklist-Einträge bestätigt). Blacklist + Re-Import-Trigger + Lösch-Schutz (D-019/D-020) sind live.
+
+Noch offen (optional, für diese Features):
+
 **a) `supabase/leaderboard-timezone.sql`** — DB-Trigger auf Europe/Berlin umstellen. Ohne diesen Schritt springt die „Heute"-Statistik nahe Mitternacht falsch.
 
 **b) `supabase/perf-upgrade.sql`** — Composite-Indizes (`assigned_to+status`, `recall_date`, `list_name`) + Trigram-Indizes für schnelle `ilike`-Suche + RPC `get_distinct_list_names()`.
+
+**c) `supabase/struktur-setup.sql`** — Berufe-Master + cluster_content-Erweiterungen (D-021).
 
 ### 2. Falls Ranglisten/Stats noch alte Daten zeigen
 - Admin → Rangliste → **„⚠️ Ranglisten auf 0 zurücksetzen"** (rote Box unten)
 - Setzt activity_log, leaderboard_cache leer + alle termin_gelegt/stattgefunden zurück auf `angerufen`
 
 ### 3. Lead-Verteilung
-Aktuelle Last (Snapshot post #40, ca. 3.300 offene Leads):
+**Hinweis:** Die Anzeigenamen der Setter weichen von den E-Mails ab (z. B. „Lisa Becker" → natascha.lehmann@horbach.de). Ungeklärt, ob das bewusste Anruf-Pseudonyme sind — vor einer Namens-Korrektur mit dem User klären (B3, offen).
 
-| Setter | Offen |
+Last-Snapshot post #47 (nach Verteilung der „Anrufliste"-Kampagne, beruf-balanciert):
+
+| Setter (Anzeigename) | offen (neu/ang.) |
 |---|---:|
-| Nico Sidorenko | 748 🔴 |
-| Elias Sanetra | 602 |
-| Jonas Tamele | 462 |
-| Emma-Antonia Tischler | 445 |
-| Natascha Lehmann | 417 |
-| Lukas Rausendorf | 376 |
-| Justin Koch | 249 |
+| Lisa Becker | ~484 |
+| Markus Sander | ~481 |
+| Antonia Tischler | ~475 |
+| Nicholas Sirenko | ~474 |
+| Robert Cerbanches | ~472 |
+| Max Weiß | ~375 |
+| Justin Stich | ~249 |
 | Christian Mende | 0 🟢 |
 
-Außerdem: **48 `prio_a=true`-Leads** (alle bei Lukas Rausendorf — kuratierte Premium-Liste, siehe D-024) · **326 Blacklist-Einträge** (D-019).
+Unzugeordneter Pool ~4.988 (Psychotherapeuten/Heilpraktiker/Kosmetikerinnen/…). **326+ Blacklist-Einträge** (D-019).
 
-→ Vor Umverteilen: aktuelle Zahlen per `GET /api/admin/setters` ziehen. Goldene Regel D-016 beachten — keine Verteilung ohne ausdrückliche Bestätigung im Chat.
+→ Vor jeder (Um-)Verteilung: aktuelle Zahlen per `GET /api/admin/setters` ziehen (liefert jetzt korrekte Counts, D-028). Beruf-balanciert verteilen via Checkbox bzw. `balanceByBeruf:true` (D-029). Goldene Regel D-016 beachten — keine Verteilung ohne ausdrückliche Bestätigung im Chat.
 
 ---
 
@@ -161,13 +178,16 @@ Außerdem: **48 `prio_a=true`-Leads** (alle bei Lukas Rausendorf — kuratierte 
 
 | Bug | Wirkung | Fix-Aufwand |
 |---|---|---|
-| **Undo zählt Statistik nicht zurück** | Bei „Rückgängig" bleibt activity_log → Rangliste zählt Aktion weiter | Klein: Snapshot um `activityLogId` erweitern, in Undo löschen |
-| **Call-Button schreibt kein activity_log** | „Anrufe"-Zähler in Rangliste untercountet | Klein: bei Call-Tap `logActivity(lead.id, 'angerufen')` schreiben |
-| **Streak ist „distinct days"** | +5-Bonus auch bei unzusammenhängenden Tagen | Mittel: echte consecutive-Logik in DB-Trigger |
 | **Closer-Zuweisung vor Mail-Versand** | Wenn Mail abgebrochen, ist Closer trotzdem gesetzt | Klein: Save erst nach explizitem Senden-Klick |
 
 *Vorher gelistet, inzwischen behoben:*
-- ~~Back-Button zeigt stale state~~ — gelöst in PR #40 (D-026): bearbeitete Leads sind lokal aus dem Deck entfernt.
+- ~~Back-Button zeigt stale state~~ — gelöst in PR #40 (D-026).
+- ~~Undo zählt Statistik nicht zurück~~ — gelöst in PR #46 (Paket C): Undo löscht den `activity_log`-Eintrag + dekrementiert todayDone.
+- ~~Call-Button schreibt kein activity_log~~ — gelöst in PR #46/#47: Cockpit- und Slide-over-Call loggen beim ersten Anruf `angerufen`.
+- ~~Streak ist „distinct days"~~ — war bereits consecutive (`calculateStreak` zählt rückwärts ab heute, bricht bei Lücke ab); Notiz war veraltet.
+- ~~`tsc --noEmit` nicht grün~~ — gelöst in PR #47 (Paket D): 0 Fehler, `target: ES2020` gesetzt.
+- ~~1000-Zeilen-Deckel verfälscht Stats/Verteilung~~ — gelöst in PR #44 (Paket A): `fetchAllRows`.
+- ~~`reset-password` ohne Admin-Check / Such-Injection~~ — gelöst in PR #47 (Paket D).
 
 ---
 

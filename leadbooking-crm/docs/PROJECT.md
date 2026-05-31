@@ -1,15 +1,21 @@
 # PROJECT.md — Was bisher gebaut wurde
 
-Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026** (Stand nach PR #40).
+Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026** (Stand nach PR #47).
 
 Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via Vercel. Drei Rollen: **Admin**, **Setter**, **Closer/Advisor**.
 
 ---
 
-## 📍 Zwischenstand — Mai 2026 (post #40)
+## 📍 Zwischenstand — Mai 2026 (post #47)
 
-**Setter-System läuft, Branding ist berufsneutral, Cockpit ist auf gezielte Zielgruppen-Arbeit + persistente Blacklist + High-Potential-Pflege ausgebaut.**
+**Setter-System läuft, Branding ist berufsneutral, Cockpit ist auf gezielte Zielgruppen-Arbeit + persistente Blacklist + High-Potential-Pflege ausgebaut. Aufräum-Welle A→D abgeschlossen (Verlässlichkeit, Admin-/Setter-Bedienung, Security).**
 
+- ✅ **Normalisierte Dublettenerkennung beim Import** (D-027) — Excel + Bulk gleichen über `normalizePhoneKey` gegen bestehende Leads + Blacklist ab; gleiche Nummer in anderer Schreibweise wird erkannt.
+- ✅ **Voller Bestand statt 1000-Deckel** (D-028) — `fetchAllRows` in Stats/Verteilung/Score; Zahlen + Verteilung jetzt vollständig.
+- ✅ **Beruf-balancierte Verteilung + serverseitiger Hebammen-Freeze** (D-029) — `balanceByBeruf` / `excludeBeruf` + Checkbox im Verteilen-Dialog.
+- ✅ **Statistik konsistent** — Call-Button schreibt `activity_log`, Undo zählt zurück; Cockpit-Index-Bugs behoben.
+- ✅ **Security/Hygiene** — `tsc --noEmit` 0 Fehler, `reset-password` admin-only, Such-Injection escaped, Auth zentral + timing-safe.
+- ✅ `kein_interesse` nur per individueller Suche findbar (nicht mehr als Massen-Filter in der Lead-Liste).
 - ✅ Berufsneutrales zentrales Skript (Hook + alle Einwände, `{beruf}`/`{beruf_plural}`)
 - ✅ Cockpit: Zielgruppen-Switcher (Beruf-Chips), „⭐ High Potential"-Tab (D-024), „📱 Nur Handys"-Filter (D-023), Default-Deck leer (D-022), Terminal-Action entfernt Lead lokal aus Deck (D-026)
 - ✅ Lead-Sortierung lernt aus `termin_gelegt`-Historie (Probability-Score, D-018) — Handys-First als zusätzliches Tie-Break (D-023)
@@ -50,9 +56,8 @@ Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via V
 - `supabase/struktur-setup.sql` — Berufe-Master + cluster_content-Erweiterungen (D-021)
 
 **Bekannte Schwachstellen (nicht akut):**
-- Undo zählt Statistik nicht zurück (activity_log bleibt)
-- Call-Button schreibt kein `activity_log` → „Anrufe"-Zähler undercountet
-- Streak ist „distinct days", nicht „consecutive"
+- Closer-Zuweisung erfolgt vor Mail-Versand (bei Abbruch trotzdem gesetzt)
+- _(behoben in #44–#47: 1000-Deckel, Undo-/Call-Statistik, tsc-Gate, reset-password/Such-Injection; Streak war bereits consecutive)_
 
 ---
 
@@ -300,6 +305,9 @@ Build wird von Vercel bei jedem `main`-Push automatisch erstellt.
 ## 🔧 Noch offen / zu beachten
 
 - **Supabase-SQL einspielen** (einmalig, idempotent):
-  - `supabase/leaderboard-timezone.sql` — Trigger auf Berlin-Zeit
-  - `supabase/perf-upgrade.sql` — Indizes + RPC
-- **Bekannte Schwachstellen** (separates Dokument): Undo zählt Statistik nicht zurück; Call-Button schreibt kein `activity_log` (→ Anrufe-Statistik untercountet); Streak ist „distinct days" statt „consecutive".
+  - ✅ `supabase/blacklist-setup.sql` — **eingespielt** (D-019/D-020 live, 326 Einträge)
+  - `supabase/leaderboard-timezone.sql` — Trigger auf Berlin-Zeit (offen)
+  - `supabase/perf-upgrade.sql` — Indizes + RPC (offen)
+  - `supabase/struktur-setup.sql` — Berufe-Master (offen)
+- **Setter-Namen ≠ E-Mail** (B3, offen): Anzeigenamen weichen von den Accounts ab — evtl. bewusste Anruf-Pseudonyme, vor Korrektur klären.
+- **Bekannte Schwachstellen** (separates Dokument): Closer-Zuweisung vor Mail-Versand.
