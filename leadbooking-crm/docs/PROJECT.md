@@ -1,50 +1,55 @@
 # PROJECT.md — Was bisher gebaut wurde
 
-Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026**.
+Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026** (Stand nach PR #40).
 
 Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via Vercel. Drei Rollen: **Admin**, **Setter**, **Closer/Advisor**.
 
 ---
 
-## 📍 Zwischenstand — Mai 2026
+## 📍 Zwischenstand — Mai 2026 (post #40)
 
-**Setter-System läuft, Branding ist berufsneutral, Performance + Verteil-Tools sind live.**
+**Setter-System läuft, Branding ist berufsneutral, Cockpit ist auf gezielte Zielgruppen-Arbeit + persistente Blacklist + High-Potential-Pflege ausgebaut.**
 
 - ✅ Berufsneutrales zentrales Skript (Hook + alle Einwände, `{beruf}`/`{beruf_plural}`)
-- ✅ Cockpit mit Zurück-Button, Undo, qualitätsbasiertem Deck, schließbarer Post-Termin-Maske
+- ✅ Cockpit: Zielgruppen-Switcher (Beruf-Chips), „⭐ High Potential"-Tab (D-024), „📱 Nur Handys"-Filter (D-023), Default-Deck leer (D-022), Terminal-Action entfernt Lead lokal aus Deck (D-026)
+- ✅ Lead-Sortierung lernt aus `termin_gelegt`-Historie (Probability-Score, D-018) — Handys-First als zusätzliches Tie-Break (D-023)
+- ✅ Persistente Blacklist (D-019) — alle drei Terminal-States (kein_interesse / termin_gelegt / termin_stattgefunden) landen idempotent in `blacklist`, überleben Hard-Delete + Re-Import
+- ✅ Lösch-Schutz (D-020) für Termine + Wiedervorlagen — DB-Trigger fängt jeden DELETE ab
+- ✅ Struktur-Hub (D-021): Berufe + Listen als first-class Entities (`/admin/struktur`)
 - ✅ Lead-Slide-over mit einheitlichem „Termin bestätigen"-Block (Closer + Mail + WhatsApp)
-- ✅ WhatsApp-Link-Normalisierung (15/15 getestet) — `wa.me`-Links immer korrekt
-- ✅ Mail-/WhatsApp-Signaturen schlank (nur Name + „Beratungsteam") — kein Hebammen-Branding mehr
-- ✅ Rangliste/Statistiken in Europe/Berlin-Zeit, im Dashboard, Reset-Button im Admin
-- ✅ Quality-Sort überall (Cockpit, Setter-Leads, Admin-Leads) — silent im Hintergrund, nicht für Setter sichtbar
-- ✅ Admin-UI für Lead-Verteilung (`/admin/leads` → 📤-Button) + Programmatic API (`POST /api/admin/distribute-leads`)
-- ✅ Agent-getriebene Verteilung per Bearer-Token (Env-Var `ADMIN_API_TOKEN`) — Claude Code kann nach Aufforderung verteilen / umstrukturieren, ohne dass der DB-Service-Key geteilt werden muss
-- ✅ Setter-Übersicht per `GET /api/admin/setters` (id + offene-Leads-Last + unzugeordnete-pro-Liste)
+- ✅ WhatsApp-Link-Normalisierung (15/15 getestet), schlanke Mail-/WhatsApp-Signaturen
+- ✅ Rangliste/Statistiken in Europe/Berlin-Zeit, Reset-Button im Admin
+- ✅ Admin-UI für Lead-Verteilung + Programmatic API (`POST /api/admin/distribute-leads`)
+- ✅ Token-fähiger Bulk-Import (D-025): `POST /api/admin/leads/bulk` mit Dedupe gegen DB + Blacklist
+- ✅ Breite Admin-API-Surface unter `ADMIN_API_TOKEN` (D-017) — Leads, Stats, Blacklist, Berufe, Listen, Profile, Closer, Cluster-Content
 - ✅ XI CRM Branding (Browser-Tab + PWA)
-- ✅ Drei lebende Docs (PROJECT/DECISIONS/WORKFLOW)
+- ✅ Vier lebende Docs (PROJECT/DECISIONS/WORKFLOW/HANDOVER)
 
-**Aktuelle Setter-Last (Snapshot):**
+**Aktuelle Setter-Last (Snapshot post #40):**
 
 | Setter | offene Leads |
 |---|---:|
-| Justin Stich | 550 🔴 |
-| Max Weiß | 162 |
-| Lisa Becker | 111 |
-| Paul Sander | 45 |
-| Robert Cerbanches | 45 |
-| Nicholas Sirenko | 37 |
-| Antonia Tischler | 23 |
-| Christian Mende | 15 🟢 |
-| **Σ offen** | **988** |
-| Unzugeordnet | 0 |
-
-→ Sehr ungleich verteilt. Umverteilen jederzeit möglich (Admin-Button oder Agent per Token).
+| Nico Sidorenko | 748 🔴 |
+| Elias Sanetra | 602 |
+| Jonas Tamele | 462 |
+| Emma-Antonia Tischler | 445 |
+| Natascha Lehmann | 417 |
+| Lukas Rausendorf | 376 |
+| Justin Koch | 249 |
+| Christian Mende | 0 🟢 |
+| **Σ offen** | ~3.300 |
+| Unzugeordnet | siehe `GET /api/admin/setters` |
+| Gesamt-Leads (DB) | 8.043 |
+| `prio_a=true` | 48 (alle bei Lukas Rausendorf, kuratierte Premium-Liste) |
+| Blacklist-Einträge | 326 |
 
 **Noch offen (DB-Schritte vom User in Supabase):**
 - `supabase/leaderboard-timezone.sql` — Trigger auf Europe/Berlin
 - `supabase/perf-upgrade.sql` — Indizes + RPC
+- `supabase/blacklist-setup.sql` — Blacklist-Tabelle + Trigger (D-019) + Lösch-Schutz (D-020)
+- `supabase/struktur-setup.sql` — Berufe-Master + cluster_content-Erweiterungen (D-021)
 
-**Bekannte Schwachstellen (nicht akut, dokumentiert in DECISIONS):**
+**Bekannte Schwachstellen (nicht akut):**
 - Undo zählt Statistik nicht zurück (activity_log bleibt)
 - Call-Button schreibt kein `activity_log` → „Anrufe"-Zähler undercountet
 - Streak ist „distinct days", nicht „consecutive"
@@ -125,7 +130,7 @@ Alle akzeptieren entweder Admin-Session-Cookie **oder** Bearer-Token (Env-Var `A
 | Endpoint | Was | Auth |
 |---|---|---|
 | `GET /api/admin/setters` | Aktive Setter + offene Leads + Unzugeordnete pro Liste | Token/Session |
-| `GET /api/admin/leads?status=&assignedTo=&listName=&search=&archived=&limit=&offset=&orderBy=&withQuality=` | Lead-Liste mit Filtern (inkl. optionalem Quality-Score) | Token/Session |
+| `GET /api/admin/leads?status=&assignedTo=&listName=&search=&archived=&prio=&limit=&offset=&orderBy=&withQuality=` | Lead-Liste mit Filtern (inkl. optionalem Quality-Score; `prio=true` → nur `prio_a=true`) | Token/Session |
 | `GET /api/admin/leads/:id` | Einzel-Lead + activity_log + Setter/Closer | Token/Session |
 | `GET /api/admin/stats?groupBy=status,assigned_to,list_name,archived&listName=&includeArchived=` | Aggregate | Token/Session |
 | `GET /api/admin/closers` | Alle Closer | Token/Session |
@@ -161,8 +166,9 @@ Body: `setterIds` (Pflicht), `listName`, `perSetterLimit`, `includeAssigned`, `s
 
 | Endpoint | Body / Query | Wirkung |
 |---|---|---|
-| `PATCH /api/admin/leads` | `{ leadIds, patch }` | Bulk-Update (Whitelist: name, phone, email, state, beruf, list_name, status, appointment_date, recall_date, notes, assigned_to ⚠️, closer_id, teams_link, call_attempts, last_call_attempt, archived) |
+| `PATCH /api/admin/leads` | `{ leadIds, patch }` | Bulk-Update (Whitelist: name, phone, email, state, beruf, list_name, status, appointment_date, recall_date, notes, assigned_to ⚠️, closer_id, teams_link, call_attempts, last_call_attempt, archived, **prio_a**) |
 | `PATCH /api/admin/leads/:id` | gleiches patch-Objekt | Einzel-Update |
+| `POST /api/admin/leads/bulk` (D-025) | `{ leads: [{name, phone, email?, state?, beruf?, list_name?, prio_a?, …}] }` | Bulk-Insert mit Dedupe gegen DB+Blacklist (normalisierte Phone); Response: `{inserted, skipped, skippedBlacklisted}` |
 | `DELETE /api/admin/leads` | `{ leadIds, mode?: "archive"\|"hard", confirm? }` | Default: archivieren (soft). Hard-Delete nur mit `confirm: true` |
 | `DELETE /api/admin/leads/:id?mode=hard&confirm=true` | — | Einzel-Delete/Archiv |
 
@@ -234,8 +240,13 @@ Build wird von Vercel bei jedem `main`-Push automatisch erstellt.
 ## 🟦 Cockpit
 
 - **Zurück-Button** im Header (← navigiert zur vorherigen Lead-Karte).
-- **Deck-Sortierung**: nie angerufene Leads zuerst, davon die mit der höchsten Termin-Wahrscheinlichkeit oben (Probability-Score, D-018). Wiedervorlagen vorne, „nicht erreicht" hinten.
-- **Undo-Button** auf der Lead-Karte: letzte Aktion (Termin / Wiedervorlage / Nicht erreicht / Kein Interesse) rückgängig — Status + Datum-Felder werden in der DB zurückgesetzt, Cockpit springt zur Karte.
+- **Zielgruppen-Switcher (Chip-Reihe oben):** Setter wählt aktiv Beruf-Filter (z. B. „Physiotherapeut") oder Sondertab. Default-Deck ist leer (D-022). Beruf-Switch forciert vollen Remount via React-`key`.
+- **„⭐ High Potential"-Tab (D-024):** zeigt ausschließlich `prio_a=true`-Leads über alle Berufsgruppen. Tab wird nur eingeblendet, wenn der Setter solche Leads zugewiesen hat. Pflege per Admin-PATCH.
+- **„📱 Nur Handys"-Filter (D-023):** Toggle reduziert das Deck strikt auf Mobilfunk-Nummern (`+49 15x/16x/17x`).
+- **Deck-Sortierung:** nie angerufene zuerst → **Handynummern zuerst** (D-023) → Probability-Score (D-018) → Lead-Score. Setter sehen die Sortier-Signale nicht (D-009).
+- **Terminal-Actions entfernen den Lead aus dem Deck (D-026):** „Nicht erreicht / Kein Interesse / Termin / Wiedervorlage" → Lead wird sofort lokal aus dem `deck`-Array entfernt und kann nicht mehr per `goBack` oder Reload zurückkommen.
+- **Defensiver Frontend-Filter (D-026):** `useState`-Initializer filtert beim Mount nochmal strikt auf `status ∈ {neu, angerufen, wiedervorlage}` — Sicherheitsnetz gegen Stale-Server-Caches.
+- **Undo-Button** auf der Lead-Karte: letzte Aktion (Termin / Wiedervorlage / Nicht erreicht / Kein Interesse) rückgängig — Status + Datum-Felder werden in der DB zurückgesetzt, der Lead wird an seine alte Position im Deck zurückgesetzt.
 - **Post-Termin-Maske** schließbar (X oben rechts) zusätzlich zum „Weiter"-Button.
 
 ## 🟦 Lead-Slide-over (Setter-Lead-Liste)
