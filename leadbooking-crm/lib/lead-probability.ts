@@ -29,6 +29,7 @@ import { leadQualityScore } from '@/lib/lead-quality'
 import type { Lead } from '@/types'
 import { formatPhoneForCall } from '@/lib/phone'
 import { cleanLeadName } from '@/lib/clean-name'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 // --- Konstanten ---
 const CACHE_TTL_MS = 30 * 60 * 1000       // 30 Minuten
@@ -130,9 +131,10 @@ async function trainModel(): Promise<ProbabilityModel> {
   const startedAt = Date.now()
   try {
     const supabase = createAdminClient()
-    const { data, error } = await supabase.from('leads').select('*')
-    if (error) throw new Error(error.message)
-    const leads = (data || []) as Lead[]
+    // Vollständig paginiert laden — sonst trainiert das Modell nur auf den
+    // ersten 1000 Leads (PostgREST-Deckel).
+    const leads = await fetchAllRows<Lead>((from, to) =>
+      supabase.from('leads').select('*').order('id', { ascending: true }).range(from, to))
     const labeled = leads.filter(l => {
       const s = (l as any).status as string
       return POSITIVE_STATUSES.has(s) || NEGATIVE_STATUSES.has(s)

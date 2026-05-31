@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { filterBlacklistedLeads } from '@/lib/blacklist'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import type { Lead } from '@/types'
 
 /**
@@ -65,15 +66,20 @@ export async function POST(req: Request) {
   // ── DB-Operationen via Service-Role-Client (umgeht RLS sauber) ────────
   const supabase = createAdminClient()
 
-  let query = supabase.from('leads').select('*')
-  if (!includeAssigned) query = query.is('assigned_to', null)
-  if (statuses.length > 0) query = query.in('status', statuses)
-  if (listName) query = query.eq('list_name', listName)
-
-  const { data: leadsRaw, error: e1 } = await query
-  if (e1) return NextResponse.json({ error: 'leads: ' + e1.message }, { status: 500 })
-
-  const rawLeads = ((leadsRaw as Lead[] | null) ?? []).slice()
+  // Vollständig paginiert laden (stabil nach id sortiert) — sonst würden
+  // bei >1000 passenden Leads die übrigen stillschweigend ignoriert.
+  let rawLeads: Lead[]
+  try {
+    rawLeads = await fetchAllRows<Lead>((from, to) => {
+      let q = supabase.from('leads').select('*').order('id', { ascending: true }).range(from, to)
+      if (!includeAssigned) q = q.is('assigned_to', null)
+      if (statuses.length > 0) q = q.in('status', statuses)
+      if (listName) q = q.eq('list_name', listName)
+      return q
+    })
+  } catch (err) {
+    return NextResponse.json({ error: 'leads: ' + (err as Error).message }, { status: 500 })
+  }
   // Blacklist filtern: Telefonnummern mit kein_interesse-Historie kommen
   // niemals erneut in den Verteil-Pool (D-019).
   const leads = await filterBlacklistedLeads(rawLeads)
