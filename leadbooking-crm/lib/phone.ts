@@ -41,6 +41,24 @@ export function formatPhoneForCall(raw: string | null | undefined): string {
   return '+49' + digits
 }
 
+/**
+ * Normalisierter Vergleichs-Key einer Telefonnummer: nur Ziffern, ohne '+'.
+ * MUSS exakt der DB-Funktion `normalize_phone()` entsprechen
+ * (supabase/blacklist-setup.sql) — gemeinsame Basis für Dubletten- und
+ * Blacklist-Abgleich, formatierungs-unabhängig:
+ *
+ *   "0151 / 60 99 64 92"  → "4915160996492"
+ *   "+49 151 60996492"    → "4915160996492"
+ *   "015160996492"        → "4915160996492"
+ *
+ * → liefert null, wenn keine verwertbare Nummer vorliegt.
+ */
+export function normalizePhoneKey(raw: string | null | undefined): string | null {
+  const intl = formatPhoneForCall(raw)
+  if (!intl) return null
+  return intl.replace(/^\+/, '')
+}
+
 // Platzhalter-/Leerwerte, die KEINE echte Website sind
 const WEBSITE_BLANKS = new Set([
   'na', 'n/a', 'n.a.', 'keine', 'kein', 'keine website', 'keinewebsite',

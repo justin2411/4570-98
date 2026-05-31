@@ -9,6 +9,7 @@ import { X, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import { Lead } from '@/types'
 import { normalizeState } from '@/lib/normalize-state'
 import { cleanLeadName } from '@/lib/clean-name'
+import { normalizePhoneKey } from '@/lib/phone'
 import toast from 'react-hot-toast'
 
 // Rohzeile kann BEIDE Formate haben (altes Excel + neue CSV)
@@ -71,10 +72,32 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows: RawRow[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
 
-    const { data: existing } = await supabase.from('leads').select('phone, email, name')
-    const existingPhones = new Set((existing ?? []).map(r => String(r.phone)))
-    const existingEmails = new Set((existing ?? []).filter(r => r.email).map(r => String(r.email).toLowerCase()))
-    const existingNames = new Set((existing ?? []).map(r => String(r.name).toLowerCase()))
+    // Bestehende Leads PAGINIERT laden — Supabase deckelt bei 1000 Zeilen,
+    // sonst würde der Dublettencheck bei >1000 Leads die meisten übersehen.
+    const existing: Array<{ phone: string | null; email: string | null; name: string | null }> = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('leads').select('phone, email, name').range(from, from + 999)
+      if (error || !data) break
+      existing.push(...(data as typeof existing))
+      if (data.length < 1000) break
+    }
+    // Dubletten werden über den NORMALISIERTEN Telefon-Key erkannt, damit
+    // dieselbe Nummer in anderer Schreibweise (0151… / +49151…) nicht doppelt
+    // landet — identisch zur DB-Normalisierung.
+    const existingPhoneKeys = new Set(existing.map(r => normalizePhoneKey(r.phone)).filter(Boolean) as string[])
+    const existingEmails = new Set(existing.filter(r => r.email).map(r => String(r.email).toLowerCase()))
+    const existingNames = new Set(existing.map(r => String(r.name || '').toLowerCase()).filter(Boolean))
+
+    // Blacklist (kein_interesse + Termine, D-019) — überlebt Lead-Löschung
+    // und Re-Import. Phones liegen dort bereits normalisiert vor. Fehlt die
+    // Tabelle (SQL noch nicht eingespielt), greift der Abgleich einfach nicht.
+    const blacklistKeys = new Set<string>()
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('blacklist').select('phone').range(from, from + 999)
+      if (error || !data) break
+      for (const r of data as Array<{ phone: string | null }>) if (r.phone) blacklistKeys.add(r.phone)
+      if (data.length < 1000) break
+    }
 
     const leads: ParsedLead[] = rows.map(r => {
       const row = r as Record<string, unknown>
@@ -100,9 +123,13 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
         beruf,
         website,
         ort,
-        isDuplicate: existingPhones.has(phone)
-          || (!!email && existingEmails.has(email.toLowerCase()))
-          || (!!name && existingNames.has(name.toLowerCase())),
+        isDuplicate: (() => {
+          const key = normalizePhoneKey(phone)
+          if (key && (existingPhoneKeys.has(key) || blacklistKeys.has(key))) return true
+          if (email && existingEmails.has(email.toLowerCase())) return true
+          if (name && existingNames.has(name.toLowerCase())) return true
+          return false
+        })(),
       }
     }).filter(l => l.name && l.phone) // nur Zeilen mit Name + Telefon
 
