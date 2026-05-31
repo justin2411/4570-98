@@ -26,7 +26,8 @@ interface RawRow {
 interface ParsedLead {
   name: string; phone: string; email: string; state: string; original_state: string;
   score: number; lead_quality: string; age_indicator: string; signals: string;
-  beruf: string; website: string; ort: string; isDuplicate?: boolean
+  beruf: string; website: string; ort: string;
+  isDuplicate?: boolean; dupReason?: 'blacklist' | 'existing' | null
 }
 
 interface Setter { id: string; full_name: string }
@@ -110,6 +111,15 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
       const website = pick(row, ['website', 'Website', 'webseite', 'url'])
       const ort = pick(row, ['ort', 'Ort', 'stadt', 'Stadt'])
       const normalized = normalizeState(rawState)
+      const phoneKey = normalizePhoneKey(phone)
+      // Warum ein Duplikat? Blacklist (kein_interesse/Termin) hat Vorrang vor
+      // "schon als Lead vorhanden" — beides wird beim Import übersprungen.
+      const dupReason: 'blacklist' | 'existing' | null =
+        (phoneKey && blacklistKeys.has(phoneKey)) ? 'blacklist'
+          : ((phoneKey && existingPhoneKeys.has(phoneKey))
+              || (!!email && existingEmails.has(email.toLowerCase()))
+              || (!!name && existingNames.has(name.toLowerCase()))) ? 'existing'
+            : null
       return {
         name,
         phone,
@@ -123,13 +133,8 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
         beruf,
         website,
         ort,
-        isDuplicate: (() => {
-          const key = normalizePhoneKey(phone)
-          if (key && (existingPhoneKeys.has(key) || blacklistKeys.has(key))) return true
-          if (email && existingEmails.has(email.toLowerCase())) return true
-          if (name && existingNames.has(name.toLowerCase())) return true
-          return false
-        })(),
+        dupReason,
+        isDuplicate: dupReason !== null,
       }
     }).filter(l => l.name && l.phone) // nur Zeilen mit Name + Telefon
 
@@ -176,7 +181,8 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
   }
 
   const newCount = parsed.filter(l => !l.isDuplicate).length
-  const dupCount = parsed.filter(l => l.isDuplicate).length
+  const existingCount = parsed.filter(l => l.dupReason === 'existing').length
+  const blacklistCount = parsed.filter(l => l.dupReason === 'blacklist').length
   const normalizedCount = parsed.filter(l => l.original_state && l.original_state !== l.state).length
 
   return (
@@ -206,7 +212,8 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
             <div className="space-y-4">
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2 text-green-600 text-sm"><CheckCircle className="w-4 h-4" />{newCount} neue Leads</div>
-                {dupCount > 0 && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertTriangle className="w-4 h-4" />{dupCount} Duplikate (übersprungen)</div>}
+                {existingCount > 0 && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertTriangle className="w-4 h-4" />{existingCount} schon im System</div>}
+                {blacklistCount > 0 && <div className="flex items-center gap-2 text-red-600 text-sm">🚫 {blacklistCount} Blacklist (kein Interesse/Termin)</div>}
                 {normalizedCount > 0 && <div className="flex items-center gap-2 text-purple-600 text-sm">🧹 {normalizedCount} Bundesländer normalisiert</div>}
               </div>
 
@@ -247,7 +254,7 @@ export function ExcelUpload({ adminId, setters, onClose, onImported }: Props) {
                             <span className="text-[10px] text-gray-400 ml-1">({l.original_state})</span>
                           )}
                         </td>
-                        <td className="px-3 py-2">{l.isDuplicate ? '⚠️ Duplikat' : '✅ Neu'}</td>
+                        <td className="px-3 py-2">{l.dupReason === 'blacklist' ? '🚫 Blacklist' : l.dupReason === 'existing' ? '⚠️ schon im System' : '✅ Neu'}</td>
                       </tr>
                     ))}
                   </tbody>
