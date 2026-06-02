@@ -1,15 +1,19 @@
 # PROJECT.md — Was bisher gebaut wurde
 
-Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026** (Stand nach PR #47).
+Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026** (Stand nach PR #51).
 
 Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via Vercel. Drei Rollen: **Admin**, **Setter**, **Closer/Advisor**.
 
 ---
 
-## 📍 Zwischenstand — Mai 2026 (post #47)
+## 📍 Zwischenstand — Mai 2026 (post #51)
 
-**Setter-System läuft, Branding ist berufsneutral, Cockpit ist auf gezielte Zielgruppen-Arbeit + persistente Blacklist + High-Potential-Pflege ausgebaut. Aufräum-Welle A→D abgeschlossen (Verlässlichkeit, Admin-/Setter-Bedienung, Security).**
+**Setter-System läuft, Branding ist berufsneutral, Cockpit ist auf gezielte Zielgruppen-Arbeit + persistente Blacklist + High-Potential-Pflege ausgebaut. Aufräum-Welle A→D abgeschlossen + Setter-UX/Persistenz (#48–#51).**
 
+- ✅ **Anruf-Persistenz** (D-030) — Call-Button schreibt via `keepalive` an `POST /api/setter/log-call`; Status/Anruf gehen beim App-Close nicht mehr verloren.
+- ✅ **Deck-Position gemerkt** (D-031) — Cockpit startet beim Reopen dort, wo der Setter war (Lead-ID, pro Scope, localStorage).
+- ✅ **Termin „stattgefunden" bestätigen** (D-032) — Termin-Ergebnis-Block im Termine-Modal (+ „Nicht erschienen").
+- ✅ **Bereinigt-Listen-Workflow** (D-033) — Status-Spalte: `sicher` behalten/verteilen, `unsicher`/`bitte prüfen`/`kein Name` hart löschen; normalisierter Telefon-Abgleich.
 - ✅ **Normalisierte Dublettenerkennung beim Import** (D-027) — Excel + Bulk gleichen über `normalizePhoneKey` gegen bestehende Leads + Blacklist ab; gleiche Nummer in anderer Schreibweise wird erkannt.
 - ✅ **Voller Bestand statt 1000-Deckel** (D-028) — `fetchAllRows` in Stats/Verteilung/Score; Zahlen + Verteilung jetzt vollständig.
 - ✅ **Beruf-balancierte Verteilung + serverseitiger Hebammen-Freeze** (D-029) — `balanceByBeruf` / `excludeBeruf` + Checkbox im Verteilen-Dialog.

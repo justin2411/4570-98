@@ -5,8 +5,29 @@
 // ============================================================
 
 import type { Lead } from '@/types'
-import { formatPhoneForCall } from './phone'
+import { formatPhoneForCall, isRealWebsite } from './phone'
 import { cleanLeadName } from './clean-name'
+
+/**
+ * Liest ein numerisches Alter aus den Lead-Daten (`age` oder `age_indicator`).
+ * Aktuell tragen die meisten Imports KEIN echtes Alter (age_indicator ist oft
+ * nur „Ja") → dann `null`, also kein Alters-Bonus. Sobald Imports ein echtes
+ * Alter/Geburtsjahr mitliefern, greift das Zielgruppen-Scoring automatisch.
+ */
+export function leadAgeYears(lead: Lead): number | null {
+  const raw = String((lead as any).age ?? (lead as any).age_indicator ?? '').trim()
+  // Geburtsjahr (19xx/20xx) → in Alter umrechnen
+  const yr = raw.match(/\b(19\d{2}|20[0-2]\d)\b/)
+  if (yr) {
+    const a = new Date().getFullYear() - parseInt(yr[1], 10)
+    return a >= 18 && a <= 99 ? a : null
+  }
+  // Sonst: zweistelliges Alter direkt
+  const m = raw.match(/\b(\d{2})\b/)
+  if (!m) return null
+  const a = parseInt(m[1], 10)
+  return a >= 18 && a <= 99 ? a : null
+}
 
 // Häufige deutsche weibliche Vornamen (lowercase, Auswahl der gängigsten).
 // Bewusst breite Liste, nicht vollständig; lässt sich später erweitern.
@@ -96,6 +117,17 @@ export function leadQualityScore(lead: Lead): number {
     if (GENERIC_LOCAL.has(local)) s -= 1
     else s += 1
     if (FREE_PROVIDERS.has(domain || '')) s += 1
+  }
+
+  // 5) Eigene Website (etablierte:r Selbstständige:r — erreichbar & seriös)
+  if (isRealWebsite((lead as any).website)) s += 2
+
+  // 6) Zielgruppen-Alter — Vermögensaufbau/Altersvorsorge: 29–45 ideal.
+  //    Wirkt nur, wenn echte Altersdaten vorliegen (sonst null → kein Effekt).
+  const age = leadAgeYears(lead)
+  if (age !== null) {
+    if (age >= 29 && age <= 45) s += 3        // Kern-Zielgruppe
+    else if (age >= 25 && age <= 52) s += 1   // Rand-Zielgruppe
   }
 
   return s

@@ -374,3 +374,51 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 **Warum:** Wiederkehrender Bedarf („jeder Setter soll Psychotherapeuten UND Heilpraktiker bekommen") musste bisher manuell gescriptet werden. Der Default-Ausschluss von Hebammen verhindert, dass eine Pool-weite Verteilung versehentlich eingefrorene Leads zuteilt.
 
 **Status:** Live (PR #45).
+
+---
+
+## D-030 · Anruf zuverlässig persistieren (keepalive statt fire-and-forget)
+
+**Entscheidung:** Der Anruf-Button (Cockpit + Setter-Slide-over) schreibt `call_attempts`, den Statuswechsel `neu→angerufen` und die `angerufen`-Aktivität über einen **`fetch({ keepalive: true })`** an einen neuen Session-Endpoint **`POST /api/setter/log-call`** — nicht mehr als fire-and-forget-Supabase-Call im Browser. Der `tel:`-Link bleibt synchron.
+
+**Warum:** Beim Antippen öffnet `tel:` parallel den Dialer; das OS kann die Seite dabei wegräumen. Ein fire-and-forget-Write ging dann verloren → der Lead stand beim erneuten Öffnen wieder auf `neu`, der Anruf fehlte in der Statistik. `keepalive` garantiert die Auslieferung auch über das Wegräumen der Seite hinaus; der synchrone `tel:`-Link erhält die iOS-User-Gesture (zuverlässiges Wählen).
+
+**Audit-Ergebnis (Kontext):** Alle Terminal-Aktionen (Kein Interesse / Nicht erreicht / Termin / Wiedervorlage) sowie Telefon-/E-Mail-Edits **awaiten** ihren DB-Write und persistieren ohnehin zuverlässig. Das Deck wird beim Öffnen serverseitig aus der DB neu gebaut (kein Stale-Client-Cache). Der Call-Button war die einzige Persistenz-Lücke.
+
+**Status:** Live (PR #49).
+
+---
+
+## D-031 · Cockpit-Deck-Position beim Reopen wiederherstellen
+
+**Entscheidung:** Das Cockpit merkt sich die zuletzt gesehene **Lead-ID** (nicht den Index) in `localStorage`, **pro Setter + Zielgruppen-Scope** (Beruf / High-Potential / Nur-Handys, Key `cockpit-pos:<setterId>:<scope>`). Beim Mount wird der Lead im frisch geladenen Deck gesucht und der Index dorthin gesetzt; ist er nicht mehr im Deck (bearbeitet), startet das Deck oben.
+
+**Warum:** Setter starteten bei jedem Öffnen wieder ganz oben. Die ID ist stabil — das Deck wird serverseitig neu gebaut, Reihenfolge/Inhalt können sich ändern, ein Index wäre unzuverlässig. Pro Scope getrennt, damit jede Zielgruppe ihre eigene Position behält.
+
+**Status:** Live (PR #50). Reiner Client-State (pro Gerät), kein DB-Schritt.
+
+---
+
+## D-032 · Termin-Ergebnis bestätigen (stattgefunden / nicht erschienen)
+
+**Entscheidung:** Das Termin-Detail-Modal (`/setter/termine`) hat einen Block **„Termin-Ergebnis"**: „✅ Termin hat stattgefunden" setzt `status=termin_stattgefunden` (per `.select('id')` verifiziert, mit `activity_log`-Eintrag) und nimmt den Lead aus der To-do-Liste (die Seite lädt nur `termin_gelegt`). „❌ Nicht erschienen / abgesagt" führt in den bestehenden Absage-Flow (Wiedervorlage / Kein Interesse).
+
+**Warum:** Die Termine-Seite wies per Banner an, vergangene Termine auf „Stattgefunden"/„Nicht erschienen" zu setzen — die Buttons fehlten aber komplett (nur Verschieben + Entfernen vorhanden). `termin_stattgefunden` löst zusätzlich korrekt die Blacklist (D-019) aus → kein erneuter Anruf.
+
+**Status:** Live (PR #51).
+
+---
+
+## D-033 · „Bereinigt"-Listen mit Status-Spalte — Workflow für Lead-Kuratierung
+
+**Entscheidung:** Vom User gelieferte „bereinigte" Listen (Excel/CSV) tragen eine **`Status`-Spalte** zur Qualitätsklassifizierung. Verarbeitung über den normalisierten Telefon-Abgleich gegen den Bestand:
+- **`sicher`** → behalten; je nach Auftrag Felder updaten (nur **`name` + `state`** sind per Admin-API patchbar — `ort`/`website` stehen NICHT auf der `PATCHABLE_COLUMNS`-Whitelist) und/oder gleichmäßig auf die aktiven Setter verteilen.
+- **`unsicher` / `bitte prüfen` / `kein Name (Praxis-/Markenname)`** → aus dem System entfernen (Hard-Delete; D-020-geschützte Termine/Wiedervorlagen werden dabei automatisch übersprungen).
+
+**Lessons Learned (Tooling):**
+- Abgleich IMMER über den **normalisierten** Telefon-Key (`normalizePhoneKey`), nie über Roh-Strings.
+- Beim vollständigen Bestands-Scan über die Admin-API **stabil nach `id` paginieren** (1000er-Seiten) — sonst verschieben sich Zeilen (Doppel-/Auslassungen) und Aggregate stimmen nicht.
+- Beim Import den **`beruf` auf den kanonischen Wert normalisieren** (z. B. „Ernährungsberater"), sonst wird jede Qualifikations-Langform eine eigene Cockpit-Gruppe.
+- CSV-Record-Zahl ≠ Zeilenzahl (mehrzeilige zitierte Felder); RFC4180-Parser nutzen. „Fehlende" Datensätze sind oft schlicht Einträge **ohne Telefonnummer** (nicht importierbar).
+
+**Status:** Etablierter Operations-Workflow (Heilpraktiker- + Anrufliste-Bereinigung, Mai 2026).

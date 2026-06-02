@@ -25,10 +25,11 @@
 // ============================================================
 
 import { createAdminClient } from '@/lib/supabase/server'
-import { leadQualityScore } from '@/lib/lead-quality'
+import { leadQualityScore, leadAgeYears } from '@/lib/lead-quality'
 import type { Lead } from '@/types'
-import { formatPhoneForCall } from '@/lib/phone'
+import { formatPhoneForCall, isRealWebsite } from '@/lib/phone'
 import { cleanLeadName } from '@/lib/clean-name'
+import { ageProxyBand } from '@/lib/age-proxy'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 // --- Konstanten ---
@@ -57,6 +58,9 @@ type Features = {
   is_female_name: 'yes' | 'no'
   has_free_provider_email: 'yes' | 'no'
   has_full_name: 'yes' | 'no'
+  has_website: 'yes' | 'no'
+  age_band: '29_45' | 'near' | 'other' | 'unknown'
+  age_proxy: 'younger' | 'older' | 'neutral'
 }
 
 type FeatureKey = keyof Features
@@ -65,6 +69,7 @@ const FEATURE_KEYS: FeatureKey[] = [
   'beruf', 'list_name', 'state',
   'has_mobile', 'has_personal_email', 'is_female_name',
   'has_free_provider_email', 'has_full_name',
+  'has_website', 'age_band', 'age_proxy',
 ]
 
 function extractFeatures(lead: Lead): Features {
@@ -93,6 +98,12 @@ function extractFeatures(lead: Lead): Features {
     has_free_provider_email = FREE_PROVIDERS.has(domain || '')
   }
 
+  const has_website = isRealWebsite((lead as any).website)
+  const age = leadAgeYears(lead)
+  const age_band: Features['age_band'] = age === null
+    ? 'unknown'
+    : (age >= 29 && age <= 45 ? '29_45' : (age >= 25 && age <= 52 ? 'near' : 'other'))
+
   return {
     beruf, list_name, state,
     has_mobile: hasMobile ? 'yes' : 'no',
@@ -100,6 +111,9 @@ function extractFeatures(lead: Lead): Features {
     is_female_name: is_female_name ? 'yes' : 'no',
     has_free_provider_email: has_free_provider_email ? 'yes' : 'no',
     has_full_name: has_full_name ? 'yes' : 'no',
+    has_website: has_website ? 'yes' : 'no',
+    age_band,
+    age_proxy: ageProxyBand(lead),
   }
 }
 
