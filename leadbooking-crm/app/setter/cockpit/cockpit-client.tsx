@@ -10,7 +10,7 @@ import { playSuccessSound, formatRelativeTime, calculateStreak } from '@/lib/coc
 import { formatPhoneForCall, isRealWebsite, websiteHref, websiteLabel } from '@/lib/phone'
 import { SCRIPT_SECTIONS, OBJECTIONS, resolveBeruf, resolveFirma } from '@/lib/script-template'
 import { cleanLeadName } from '@/lib/clean-name'
-import { EMAIL_TEMPLATES, WHATSAPP_TEMPLATES, applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl } from '@/lib/message-templates'
+import { applicableWhatsappTemplates, buildWhatsappUrl, buildMailtoUrl, pickWhatsappText, pickEmailTemplate } from '@/lib/message-templates'
 import { CloserNotify } from '@/components/closer-notify'
 import toast from 'react-hot-toast'
 
@@ -132,22 +132,17 @@ function buildClusterSignature(setter: Partial<Profile>, _cluster: ClusterConten
   return `${name}\n${role}`
 }
 
-// WhatsApp-Text aus Cluster (Fallback global), Platzhalter ersetzt
+// WhatsApp-Text — Rangfolge: Profil-Custom > Liste/Cluster > Standard. Platzhalter ersetzt.
 function renderClusterWhatsapp(templateId: string, lead: Lead, setter: Partial<Profile>, cluster: ClusterContent | null): string {
-  const fromCluster = cluster?.templates?.[templateId]?.text
-  const def = WHATSAPP_TEMPLATES.find(t => t.id === templateId)?.defaultText || ''
-  const text = (fromCluster && fromCluster.trim()) ? fromCluster : def
+  const text = pickWhatsappText(templateId, setter.custom_templates as any, cluster?.templates as any)
   return renderClusterText(text, lead, setter, cluster)
 }
 
-// E-Mail (Betreff + Body) aus Cluster (Fallback global), Signatur + Platzhalter ersetzt
+// E-Mail (Betreff + Body) — Rangfolge pro Feld: Profil-Custom > Liste/Cluster > Standard.
 function renderClusterEmail(templateId: string, lead: Lead, setter: Partial<Profile>, cluster: ClusterContent | null): { subject: string; body: string } {
-  const def = EMAIL_TEMPLATES.find(t => t.id === templateId)
-  const fromCluster = cluster?.templates?.[templateId]
-  const subjT = (fromCluster?.subject && fromCluster.subject.trim()) ? fromCluster.subject : (def?.defaultSubject || '')
-  let bodyT = (fromCluster?.body && fromCluster.body.trim()) ? fromCluster.body : (def?.defaultBody || '')
+  const { subject: subjT, body: bodyRaw } = pickEmailTemplate(templateId, setter.custom_templates as any, cluster?.templates as any)
   // Signatur zuerst einsetzen, dann restliche Platzhalter
-  bodyT = bodyT.replaceAll('{signature}', buildClusterSignature(setter, cluster))
+  const bodyT = bodyRaw.replaceAll('{signature}', buildClusterSignature(setter, cluster))
   return {
     subject: renderClusterText(subjT, lead, setter, cluster),
     body: renderClusterText(bodyT, lead, setter, cluster),
