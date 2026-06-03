@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, LeadStatus, STATUS_CONFIG } from '@/types'
 import { X, Phone, Clock, ChevronLeft, ChevronRight, SkipForward, MessageCircle, Globe, Pencil, Plus } from 'lucide-react'
-import { WHATSAPP_TEMPLATES, EMAIL_TEMPLATES, buildWhatsappUrl } from '@/lib/message-templates'
+import { buildWhatsappUrl, pickWhatsappText, pickEmailTemplate } from '@/lib/message-templates'
 import { resolveBeruf, resolveFirma } from '@/lib/script-template'
 import { cleanLeadName } from '@/lib/clean-name'
 import { CloserNotify } from '@/components/closer-notify'
@@ -38,6 +38,7 @@ type SetterLite = {
   phone_direct: string | null
   custom_signature: string | null
   use_custom_signature: boolean
+  custom_templates?: Record<string, any> | null
 }
 
 const STATUS_ORDER: LeadStatus[] = ['angerufen', 'nicht_erreicht', 'wiedervorlage', 'termin_gelegt', 'termin_stattgefunden', 'kein_interesse']
@@ -90,19 +91,15 @@ function buildClusterSignature(setter: SetterLite | null, _cluster: ClusterConte
   return `${name}\n${role}`
 }
 
+// Rangfolge: Profil-Custom > Liste/Cluster > Standard (pro Feld).
 function renderClusterWhatsapp(templateId: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): string {
-  const fromCluster = cluster?.templates?.[templateId]?.text
-  const def = WHATSAPP_TEMPLATES.find(t => t.id === templateId)?.defaultText || ''
-  const text = (fromCluster && fromCluster.trim()) ? fromCluster : def
+  const text = pickWhatsappText(templateId, setter?.custom_templates as any, cluster?.templates as any)
   return renderClusterText(text, lead, setter, cluster)
 }
 
 function renderClusterEmail(templateId: string, lead: Lead, setter: SetterLite | null, cluster: ClusterContent | null): { subject: string; body: string } {
-  const def = EMAIL_TEMPLATES.find(t => t.id === templateId)
-  const fromCluster = cluster?.templates?.[templateId]
-  const subjT = (fromCluster?.subject && fromCluster.subject.trim()) ? fromCluster.subject : (def?.defaultSubject || '')
-  let bodyT = (fromCluster?.body && fromCluster.body.trim()) ? fromCluster.body : (def?.defaultBody || '')
-  bodyT = bodyT.replaceAll('{signature}', buildClusterSignature(setter, cluster))
+  const { subject: subjT, body: bodyRaw } = pickEmailTemplate(templateId, setter?.custom_templates as any, cluster?.templates as any)
+  const bodyT = bodyRaw.replaceAll('{signature}', buildClusterSignature(setter, cluster))
   return { subject: renderClusterText(subjT, lead, setter, cluster), body: renderClusterText(bodyT, lead, setter, cluster) }
 }
 
@@ -169,7 +166,7 @@ export function LeadSlideOver({ lead, userId, onClose, onUpdate, onNext, onPrev,
 
   useEffect(() => {
     if (!userId) return
-    supabase.from('profiles').select('full_name, role_title, teams_room_url, phone_direct, custom_signature, use_custom_signature')
+    supabase.from('profiles').select('full_name, role_title, teams_room_url, phone_direct, custom_signature, use_custom_signature, custom_templates')
       .eq('id', userId).single().then(({ data }) => { if (data) setSetterProfile(data as any) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])

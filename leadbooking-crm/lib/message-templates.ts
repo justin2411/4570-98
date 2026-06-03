@@ -256,6 +256,54 @@ export interface CustomTemplate {
 
 export type CustomTemplates = Record<string, CustomTemplate>
 
+// Cluster-/Listen-Vorlagen (cluster_content.templates) — pro Liste, im Admin
+// unter „Inhalte" gepflegt.
+export type ClusterTemplates = Record<string, { text?: string; subject?: string; body?: string }>
+
+// ============================================================
+// EINHEITLICHE VORLAGEN-AUFLÖSUNG — Rangfolge (pro Feld):
+//   1) eigene Profil-Vorlage (use_custom + Feld gefüllt)
+//   2) Listen-/Cluster-Vorlage (Admin → Inhalte)
+//   3) Standard-Vorlage
+// Wird von ALLEN Render-Pfaden (Cockpit, Slide-over, Termine) genutzt, damit
+// editierte Texte garantiert überall greifen.
+// ============================================================
+
+/** WhatsApp-Rohtext nach Rangfolge wählen. */
+export function pickWhatsappText(
+  templateId: string,
+  custom?: CustomTemplates | null,
+  cluster?: ClusterTemplates | null,
+): string {
+  const c = custom?.[templateId]
+  if (c?.use_custom && c.text?.trim()) return c.text
+  const cl = cluster?.[templateId]?.text
+  if (cl && cl.trim()) return cl
+  return WHATSAPP_TEMPLATES.find(t => t.id === templateId)?.defaultText || ''
+}
+
+/** E-Mail-Betreff + -Body nach Rangfolge wählen — PRO FELD unabhängig. */
+export function pickEmailTemplate(
+  templateId: string,
+  custom?: CustomTemplates | null,
+  cluster?: ClusterTemplates | null,
+): { subject: string; body: string } {
+  // Backward-Compat: alter Key 'email_body' galt als 'email_confirmation'
+  const legacy = (templateId === 'email_confirmation' && custom?.['email_body']?.use_custom) ? custom['email_body'] : null
+  const c = custom?.[templateId] || legacy || undefined
+  const cl = cluster?.[templateId]
+  const def = EMAIL_TEMPLATES.find(t => t.id === templateId)
+    || EMAIL_TEMPLATES.find(t => t.id === 'email_confirmation')!
+
+  const subject = (c?.use_custom && c.subject?.trim())
+    ? c.subject!
+    : (cl?.subject?.trim() ? cl.subject! : def.defaultSubject)
+  const body = (c?.use_custom && c.body?.trim())
+    ? c.body!
+    : (cl?.body?.trim() ? cl.body! : def.defaultBody)
+  return { subject, body }
+}
+
 // ============================================================
 // RENDER-LOGIC
 // ============================================================
@@ -347,17 +395,18 @@ export function applicableEmailTemplates(lead: Lead): EmailTemplateDef[] {
   return EMAIL_TEMPLATES.filter(t => t.condition(lead))
 }
 
-export function renderWhatsapp(templateId: string, lead: Lead, setter: Partial<Profile>): string {
-  const text = getTemplateText(templateId, setter.custom_templates as CustomTemplates | undefined)
+export function renderWhatsapp(templateId: string, lead: Lead, setter: Partial<Profile>, cluster?: ClusterTemplates | null): string {
+  const text = pickWhatsappText(templateId, setter.custom_templates as CustomTemplates | undefined, cluster)
   return renderMessage(text, lead, setter)
 }
 
 export function renderEmail(
   templateId: string,
   lead: Lead,
-  setter: Partial<Profile>
+  setter: Partial<Profile>,
+  cluster?: ClusterTemplates | null,
 ): { subject: string; body: string } {
-  const { subject: subjT, body: bodyT } = getEmailTemplate(templateId, setter.custom_templates as CustomTemplates | undefined)
+  const { subject: subjT, body: bodyT } = pickEmailTemplate(templateId, setter.custom_templates as CustomTemplates | undefined, cluster)
   return {
     subject: renderMessage(subjT, lead, setter),
     body: renderMessage(bodyT, lead, setter, { includeSignature: true }),

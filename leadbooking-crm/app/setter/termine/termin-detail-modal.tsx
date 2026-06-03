@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Lead, Profile } from '@/types'
 import {
@@ -25,6 +25,15 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
   const supabase = createClient()
   const [view, setView] = useState<View>('main')
   const [saving, setSaving] = useState(false)
+  // Listen-/Cluster-Vorlagen des Leads laden — für die einheitliche Rangfolge
+  // Profil-Custom > Liste > Standard (sonst wäre die Termine-Seite ohne Liste).
+  const [clusterTemplates, setClusterTemplates] = useState<Record<string, any> | null>(null)
+  useEffect(() => {
+    const ln = ((lead as any).list_name || '').trim()
+    if (!ln) return
+    supabase.from('cluster_content').select('templates').eq('list_name', ln).maybeSingle()
+      .then(({ data }) => { if (data) setClusterTemplates((data as any).templates || null) })
+  }, [lead, supabase])
 
   const date = lead.appointment_date ? new Date(lead.appointment_date) : null
   const dateStr = date?.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) || '—'
@@ -328,6 +337,7 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
               lead={lead}
               setter={setter}
               templates={allWaTemplates}
+              clusterTemplates={clusterTemplates}
               onBack={() => setView('main')}
             />
           )}
@@ -338,6 +348,7 @@ export function TerminDetailModal({ lead, setter, onClose, onUpdate, onDelete }:
               lead={lead}
               setter={setter}
               templates={allEmailTemplates}
+              clusterTemplates={clusterTemplates}
               onBack={() => setView('main')}
             />
           )}
@@ -451,14 +462,15 @@ function CancelView({ saving, onCancel, onBack }: {
 
 // ============== WHATSAPP-PICKER ==============
 
-function WhatsappPicker({ lead, setter, templates, onBack }: {
+function WhatsappPicker({ lead, setter, templates, clusterTemplates, onBack }: {
   lead: Lead
   setter: Profile
   templates: any[]
+  clusterTemplates?: Record<string, any> | null
   onBack: () => void
 }) {
   function send(templateId: string) {
-    const text = renderWhatsapp(templateId, lead, setter)
+    const text = renderWhatsapp(templateId, lead, setter, clusterTemplates)
     window.open(buildWhatsappUrl(lead.phone, text), '_blank')
   }
 
@@ -492,14 +504,15 @@ function WhatsappPicker({ lead, setter, templates, onBack }: {
 
 // ============== EMAIL-PICKER ==============
 
-function EmailPicker({ lead, setter, templates, onBack }: {
+function EmailPicker({ lead, setter, templates, clusterTemplates, onBack }: {
   lead: Lead
   setter: Profile
   templates: any[]
+  clusterTemplates?: Record<string, any> | null
   onBack: () => void
 }) {
   function send(templateId: string) {
-    const { subject, body } = renderEmail(templateId, lead, setter)
+    const { subject, body } = renderEmail(templateId, lead, setter, clusterTemplates)
     window.location.href = buildMailtoUrl(lead.email || '', subject, body)
   }
 
