@@ -206,7 +206,7 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
   const [dark, setDark] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Lead[]>([])
+  const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -357,19 +357,42 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
         const phoneMatch = queryDigits.length >= 3 && normalizePhone(lead.phone || '').includes(queryDigits)
         return nameMatch || phoneMatch
       })
+      // (a) Eigene Leads (RLS) — volle Datensätze, ins Deck holbar
       const orClauses: string[] = [`name.ilike.%${query}%`]
       if (queryDigits.length >= 3) orClauses.push(`phone.ilike.%${queryDigits}%`)
       if (query !== queryDigits) orClauses.push(`phone.ilike.%${query}%`)
       const { data } = await supabase.from('leads').select('*').or(orClauses.join(',')).limit(10)
       const localIds = new Set(localResults.map(l => l.id))
       const dbExtra = ((data as any[]) || []).filter((l: any) => !localIds.has(l.id)) as Lead[]
-      setSearchResults([...localResults, ...dbExtra])
+      const own = [...localResults, ...dbExtra]
+      // (b) Systemweit (Service-Role): fremde / unzugeordnete / Blacklist-Nummern
+      //     — nur read-only Info, damit Rückrufer GARANTIERT gefunden werden.
+      let foreign: any[] = []
+      try {
+        const res = await fetch('/api/setter/lookup?q=' + encodeURIComponent(query))
+        if (res.ok) {
+          const j = await res.json()
+          const ownIds = new Set(own.map(l => l.id))
+          foreign = (j.results || []).filter((r: any) => !ownIds.has(r.id) && (r.mine === false || r.source === 'blacklist'))
+        }
+      } catch { /* offline: zumindest eigene Treffer zeigen */ }
+      setSearchResults([...own, ...foreign])
       setSearching(false)
     }, 250)
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current) }
   }, [searchQuery, deck, supabase])
 
-  function selectSearchResult(lead: Lead) {
+  function selectSearchResult(lead: any) {
+    // Systemweiter Treffer (fremder Setter / unzugeordnet / Blacklist):
+    // read-only — nur Info anzeigen, NICHT ins eigene Deck holen.
+    if (lead.source) {
+      const who = lead.source === 'blacklist'
+        ? '🚫 Blacklist'
+        : (lead.assignedName ? `bei ${lead.assignedName}` : 'unzugeordnet')
+      toast(`${cleanLeadName(lead.name, getBeruf(lead))} · ${statusLabel(lead.status)} · ${who}`, { icon: 'ℹ️', duration: 6000 })
+      setSearchQuery(''); setSearchResults([]); setDrawer('closed')
+      return
+    }
     const existingIdx = deck.findIndex(l => l.id === lead.id)
     if (existingIdx === currentIdx) {
       // schon sichtbar
@@ -614,7 +637,11 @@ export function CockpitClient({ initialDeck, setter, clusterContent = [], availa
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-0.5">
                       <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-medium " + statusBadgeClass(lead.status)}>{statusLabel(lead.status)}</span>
-                      {isInDeck && <span className="text-[9px] text-gray-400">im Deck</span>}
+                      {lead.source === 'blacklist'
+                        ? <span className="text-[9px] text-red-500">🚫 Blacklist</span>
+                        : lead.source
+                          ? <span className="text-[9px] text-gray-400">{lead.assignedName ? `bei ${lead.assignedName}` : 'unzugeordnet'}</span>
+                          : isInDeck && <span className="text-[9px] text-gray-400">im Deck</span>}
                     </div>
                   </div>
                 </button>
