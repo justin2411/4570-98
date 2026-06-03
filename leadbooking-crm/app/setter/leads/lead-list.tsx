@@ -48,6 +48,27 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
   const [search, setSearch] = useState('')
   const [navList, setNavList] = useState<string[]>([])
   const [navIdx, setNavIdx] = useState<number | null>(null)
+  // Systemweite Treffer (fremde/unzugeordnete/Blacklist-Nummern) — read-only,
+  // damit ein Rückrufer GARANTIERT gefunden wird, auch wenn der Lead nicht dir
+  // gehört. Eigene Treffer stehen weiterhin in der normalen Liste.
+  const [globalHits, setGlobalHits] = useState<any[]>([])
+
+  useEffect(() => {
+    const q = search.trim()
+    if (q.length < 2) { setGlobalHits([]); return }
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/setter/lookup?q=' + encodeURIComponent(q))
+        if (!res.ok) return
+        const j = await res.json()
+        if (cancelled) return
+        const ownIds = new Set(leads.map(l => l.id))
+        setGlobalHits((j.results || []).filter((r: any) => !ownIds.has(r.id) && (r.mine === false || r.source === 'blacklist')))
+      } catch { /* offline: nur eigene Treffer */ }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [search, leads])
 
   useEffect(() => {
     const ch = supabase.channel('leads').on('postgres_changes',
@@ -220,12 +241,37 @@ export function LeadList({ initialLeads, userId }: { initialLeads: Lead[]; userI
             )}
           </button>
         ))}
-        {filtered.length === 0 && (
+        {filtered.length === 0 && globalHits.length === 0 && (
           <p className="text-center text-gray-500 py-12">
             {search ? 'Kein Lead passt zu deiner Suche' : 'Keine Leads gefunden'}
           </p>
         )}
       </div>
+
+      {/* Systemweite Treffer — read-only, zur Identifikation von Rückrufern */}
+      {search.trim().length >= 2 && globalHits.length > 0 && (
+        <div className="space-y-2">
+          <div className="px-1">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-gray-500">🔎 Systemweit gefunden <span className="text-gray-400">· {globalHits.length}</span></h2>
+            <p className="text-[11px] text-gray-400">Gehört nicht dir — nur zur Identifikation von Rückrufern (z. B. wenn jemand zurückruft).</p>
+          </div>
+          {globalHits.map((h, i) => (
+            <div key={'g' + i} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-900 text-sm truncate">{cleanLeadName(h.name || '', h.beruf || '')}</div>
+                  <div className="text-sm text-gray-700">{formatPhoneForCall(h.phone)}{h.state ? <span className="text-gray-400 text-xs"> · {h.state}</span> : null}</div>
+                  {h.email && <div className="text-xs text-gray-400 truncate">{h.email}</div>}
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[h.status as LeadStatus] || 'bg-gray-100 text-gray-600'}`}>{STATUS_LABELS[h.status as LeadStatus] || h.status}</span>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{h.source === 'blacklist' ? '🚫 Blacklist' : h.assignedName ? `bei ${h.assignedName}` : 'unzugeordnet'}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {currentLead && navIdx !== null && (
         <LeadSlideOver
