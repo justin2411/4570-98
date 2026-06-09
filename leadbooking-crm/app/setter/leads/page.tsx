@@ -11,10 +11,24 @@ export default async function SetterLeadsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: leadsRaw } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('assigned_to', user.id)
+  // Alle zugewiesenen Leads paginiert laden. Supabase liefert pro Query
+  // standardmäßig max. 1000 Zeilen — Setter mit >1000 Leads verlieren sonst
+  // still die hinteren Einträge (z. B. zuletzt zugewiesene Berufe wie Doula
+  // tauchen dann nur im Cockpit auf, nicht unter „Meine Leads"). Darum hier
+  // über .range() seitenweise alles holen.
+  const PAGE = 1000
+  const leadsRaw: Lead[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('assigned_to', user.id)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error || !data || data.length === 0) break
+    leadsRaw.push(...(data as Lead[]))
+    if (data.length < PAGE) break
+  }
 
   // Sortierung: nie angerufene zuerst, dann Handynummern, dann Probability-Score,
   // dann Lead-Score. Handys nach vorne ist Setter-Wunsch.
