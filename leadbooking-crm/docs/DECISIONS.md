@@ -422,3 +422,15 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 - CSV-Record-Zahl ≠ Zeilenzahl (mehrzeilige zitierte Felder); RFC4180-Parser nutzen. „Fehlende" Datensätze sind oft schlicht Einträge **ohne Telefonnummer** (nicht importierbar).
 
 **Status:** Etablierter Operations-Workflow (Heilpraktiker- + Anrufliste-Bereinigung, Mai 2026).
+
+---
+
+## D-034 · „Meine Leads"-Seite paginiert jetzt vollständig (D-028-Lücke geschlossen)
+
+**Entscheidung:** Die Setter-Seite „Meine Leads" (`app/setter/leads/page.tsx`) lädt die zugewiesenen Leads über **`fetchAllRows()`** (paginiert, stabil nach `id`) statt mit einem nackten `.select('*').eq('assigned_to', …)`.
+
+**Warum:** D-028 hatte den PostgREST-1000-Zeilen-Deckel an den Aggregations-/Verteilungs-Stellen geschlossen, **diese Setter-Seite aber übersehen.** Setter mit >1000 zugewiesenen Leads (live bestätigt: Robert mit 1.072) verloren still die hinteren Einträge. Konkret tauchten zuletzt zugewiesene Berufe (z. B. **Doula**) nur im **Cockpit** auf — das die Leads direkt per `.eq('beruf', …)` lädt — aber nicht unter „Meine Leads", weil dort die **Beruf-Filter-Chips aus den geladenen Leads** gebaut werden. Fehlt der Chip, sind die Leads für den Setter unauffindbar.
+
+**Noch offen (gleiche Wurzel):** Im Cockpit baut `berufAggregate` (`select('beruf').eq('assigned_to', …)` in `app/setter/cockpit/page.tsx`) die Chip-**Counts** ebenfalls aus max. 1000 Zeilen. Relevant erst bei >1000 Leads und nur für die angezeigte Zahl — die Leads selbst werden beruf-gefiltert geladen und sind nicht betroffen. Bei Gelegenheit auf `fetchAllRows()` umziehen.
+
+**Status:** **PR #55 — NOCH NICHT GEMERGED** (Draft, CI grün, `mergeable_state: clean`). Geht erst mit Merge + Vercel-Prod-Deploy live. Branch `claude/sharp-ride-KluW2`.

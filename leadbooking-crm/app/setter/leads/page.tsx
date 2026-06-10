@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { LeadList } from './lead-list'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { isHandyLead } from '@/lib/handy-check'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import type { Lead } from '@/types'
 
 export default async function SetterLeadsPage() {
@@ -11,24 +12,15 @@ export default async function SetterLeadsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Alle zugewiesenen Leads paginiert laden. Supabase liefert pro Query
-  // standardmäßig max. 1000 Zeilen — Setter mit >1000 Leads verlieren sonst
-  // still die hinteren Einträge (z. B. zuletzt zugewiesene Berufe wie Doula
-  // tauchen dann nur im Cockpit auf, nicht unter „Meine Leads"). Darum hier
-  // über .range() seitenweise alles holen.
-  const PAGE = 1000
-  const leadsRaw: Lead[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('assigned_to', user.id)
-      .order('id', { ascending: true })
-      .range(from, from + PAGE - 1)
-    if (error || !data || data.length === 0) break
-    leadsRaw.push(...(data as Lead[]))
-    if (data.length < PAGE) break
-  }
+  // Alle zugewiesenen Leads paginiert laden (D-028). Supabase/PostgREST
+  // deckelt jede Antwort hart bei 1000 Zeilen — Setter mit >1000 Leads
+  // verlieren bei einem nackten .select() still die hinteren Einträge
+  // (z. B. zuletzt zugewiesene Berufe wie Doula tauchen dann nur im Cockpit
+  // auf, nicht unter „Meine Leads"). Darum über fetchAllRows() seitenweise
+  // alles holen, stabil nach id sortiert.
+  const leadsRaw = await fetchAllRows<Lead>((from, to) =>
+    supabase.from('leads').select('*').eq('assigned_to', user.id).order('id').range(from, to),
+  )
 
   // Sortierung: nie angerufene zuerst, dann Handynummern, dann Probability-Score,
   // dann Lead-Score. Handys nach vorne ist Setter-Wunsch.

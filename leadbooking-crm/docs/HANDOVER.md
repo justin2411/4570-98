@@ -1,11 +1,12 @@
 # HANDOVER.md — Übergabeprotokoll
 
-**Stand:** Mai 2026 (post #51)
+**Stand:** Juni 2026 (post #51 — **PR #55 offen, noch nicht gemerged**)
 **Projekt:** XI CRM (`leadbooking-crm/`) auf Next.js 14 + Supabase + Vercel
 **Repo:** `justin2411/4570-98`
-**Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.**
+**Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.** Aktuelle Session: `claude/sharp-ride-KluW2`.
 **Production:** https://4570-98.vercel.app
 **Letzter Merge:** PR #51 (Termin „stattgefunden" bestätigen)
+**Offen (nicht in `main`):** PR #55 — „Meine Leads" paginiert vollständig (D-034). Siehe „🔴 Nicht gemergte Änderung" unten.
 
 ---
 
@@ -17,6 +18,24 @@
 
 ---
 
+## 🔴 Nicht gemergte Änderung — direkte Anweisung
+
+> **Diese Änderung ist fertig, getestet und gepusht, aber NOCH NICHT in `main`/Production.** Sie liegt als **Draft-PR #55** auf Branch `claude/sharp-ride-KluW2`. Bis zum Merge ist der Bug auf der Live-Seite weiterhin vorhanden.
+
+**Was:** „Meine Leads" (`app/setter/leads/page.tsx`) lädt zugewiesene Leads jetzt vollständig paginiert über `fetchAllRows()` (vorher nacktes `.select()` → max. 1000 Zeilen). → **D-034**
+
+**Warum dringend:** Setter mit >1000 Leads (Robert: 1.072) sahen ihre zuletzt zugewiesenen Berufe — u. a. **Doula** — nur im Cockpit, nicht unter „Meine Leads". Reiner Anzeige-/Auffindbarkeits-Bug, keine Datenänderung.
+
+**Status:** Draft, `npx tsc --noEmit` ✅, CI grün, `mergeable_state: clean`. Preview deployed.
+
+**→ Konkrete Schritte (in dieser Reihenfolge):**
+1. **GitHub-Verbindung neu autorisieren** — das GitHub-MCP-OAuth-Token war am Session-Ende abgelaufen (kein PAT nötig; Connector im Web-UI neu verbinden / Re-Auth-Banner klicken).
+2. **PR #55 auf der Preview prüfen:** als Robert einloggen → „Meine Leads" → Chip **„Doula"** muss erscheinen und seine 50 Doulas zeigen.
+3. **PR #55 aus Draft holen** (Ready for review) **und mergen** (Squash, D-005). Nach Vercel-Prod-Deploy ist der Fix live.
+4. **Optional/Folgearbeit:** Cockpit-`berufAggregate` ebenfalls auf `fetchAllRows()` umziehen (Chip-Counts bei >1000 Leads, siehe D-034 „Noch offen").
+
+---
+
 ## 🔑 Zugänge & Tokens
 
 | Ressource | Wo | Was zu wissen |
@@ -25,7 +44,7 @@
 | **Supabase** | Dashboard via supabase.com | Tabellen: `profiles`, `leads`, `activity_log`, `leaderboard_cache`, `cluster_content`, `closers` |
 | **`ADMIN_API_TOKEN`** | Vercel → Environment Variables (Production) | Aktiv & getestet. Wert kennt der User (war im Chat). Bei Bedarf rotieren: neuen Wert in Vercel setzen + Redeploy. |
 | **`SUPABASE_SERVICE_ROLE_KEY`** | Vercel → Environment Variables | Server-side für admin-Operations |
-| **GitHub MCP** | Claude Code | Beschränkt auf Repo `justin2411/4570-98` |
+| **GitHub MCP** | Claude Code | Beschränkt auf Repo `justin2411/4570-98`. **OAuth-Token läuft pro Session ab** — bei „requires re-authorization" den Connector im Web-UI neu verbinden (kein PAT nötig). |
 
 ⚠️ Der Claude-Code-Agent hat **keinen** direkten DB-Zugriff. Für Daten-Operationen entweder Admin-Button im UI oder den Token-geschützten API-Endpoint.
 
@@ -99,6 +118,17 @@ Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ände
 ---
 
 ## ✅ Was zuletzt fertig gemacht wurde
+
+**Aktuelle Session (Juni 2026) — Code:**
+- **PR #55 (NOCH OFFEN, Draft)** — „Meine Leads" paginiert vollständig via `fetchAllRows()`. → D-034. Siehe „🔴 Nicht gemergte Änderung" oben.
+
+**Aktuelle Session (Juni 2026) — Datenoperationen (live, kein Code):**
+- **Doula** „Doula Direktkontakt" (186) importiert → Nicholas; später Bestand **215 Doulas** umverteilt: Nicholas 65 / Lisa 100 / Robert 50.
+- **Top Leads** (Mix: IBCLC, Familienbegleiterin, Mütterpflegerin …) importiert, beruf = CSV-Kategorie. Doppel-Import mit gemischten Berufen wieder zurückgenommen (Hard-Delete der 249 Fehl-Labels).
+- **Hebammen** „Hebammen TOP" (249, beruf korrekt aus `zielgruppe`=Hebamme, nicht `kategorie`=BfHD) importiert, 50/50 auf Antonia/Lisa, dann 50 an Robert → **danach komplett wieder rausgezogen** (unassigned + `archived=true`, reversibel, nichts gelöscht).
+- **Yogalehrerinnen** „Yogalehrerinnen BDY" (228 Handy-Leads, beruf=Yogalehrerin aus `zielgruppe`) gleichmäßig 76/76/76 auf **Marie Fischer** (neu angelegt), Robert, Antonia.
+- **Fotografen** „BFF Fotografen TOP": 103 freie an Robert → Robert 129 / Nicholas 25 / Markus 1, Pool 0.
+- **Lessons (xlsx/CSV-Berufsfeld):** In den `*_bdy_*`/`hebammen`/`doula`-Dateien steht der **Beruf in `zielgruppe`**, `kategorie` ist die Quelle/Verband (BfHD, BDY). Beim Import immer `zielgruppe` → `beruf` mappen, nicht `kategorie`.
 
 **Setter-UX + Persistenz (#48–#51, Mai 2026):**
 
@@ -198,6 +228,7 @@ Unzugeordneter Pool ~5.595 (inkl. „Ernährungsberater 2. Wahl" 611, Kosmetiker
 | **B3: Setter-Anzeigenamen ≠ E-Mail** | „Lisa Becker" → natascha.lehmann@… — evtl. bewusste Anruf-Pseudonyme | Mit User klären, dann ggf. `PATCH profiles` |
 
 *Vorher gelistet, inzwischen behoben:*
+- ~~„Meine Leads" zeigt bei >1000 Leads die hinteren Berufe (z. B. Doula) nicht~~ — **Fix fertig in PR #55 (D-034), aber NOCH NICHT GEMERGED** → bis Merge auf Production weiterhin vorhanden.
 - ~~Anruf-Status geht bei App-Close verloren~~ — gelöst in PR #49 (D-030): keepalive-Endpoint.
 - ~~Cockpit startet beim Reopen oben~~ — gelöst in PR #50 (D-031): Position gemerkt.
 - ~~Termin nicht als „stattgefunden" bestätigbar~~ — gelöst in PR #51 (D-032).
@@ -213,6 +244,7 @@ Unzugeordneter Pool ~5.595 (inkl. „Ernährungsberater 2. Wahl" 611, Kosmetiker
 
 ## 🚀 Empfohlene nächste Schritte (priorisiert)
 
+0. **PR #55 mergen** (GitHub re-auth → Preview prüfen → Ready → Squash-Merge) → „Meine Leads"-Bug ist live behoben. Siehe „🔴 Nicht gemergte Änderung" oben.
 1. **Supabase-SQLs einspielen** (siehe oben, 5 Min) → Stats werden zuverlässig
 2. **Cleanup-SQL für Stats laufen lassen** (Reset-Button oder SQL aus Chat) → alle starten bei 0
 3. **Optional: Bekannte Schwachstellen #1 und #2 fixen** (Undo + Call-Statistik) → komplett konsistente Statistik
