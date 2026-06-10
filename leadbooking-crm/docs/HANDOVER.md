@@ -1,12 +1,11 @@
 # HANDOVER.md — Übergabeprotokoll
 
-**Stand:** Juni 2026 (post #51 — **PR #55 offen, noch nicht gemerged**)
+**Stand:** Juni 2026 (post #55)
 **Projekt:** XI CRM (`leadbooking-crm/`) auf Next.js 14 + Supabase + Vercel
 **Repo:** `justin2411/4570-98`
-**Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.** Aktuelle Session: `claude/sharp-ride-KluW2`.
+**Dev-Branch:** wechselt pro Session (z. B. `claude/adoring-rubin-HaFmI`, `claude/brave-galileo-n3x6e` …) — wird vom Web-Harness pro Session generiert. **Immer aktuellen Branch aus der Session-Konfiguration nehmen, nicht hier hardcoden.** Aktuelle Session: `claude/loving-shannon-i1sh77`.
 **Production:** https://4570-98.vercel.app
-**Letzter Merge:** PR #51 (Termin „stattgefunden" bestätigen)
-**Offen (nicht in `main`):** PR #55 — „Meine Leads" paginiert vollständig (D-034). Siehe „🔴 Nicht gemergte Änderung" unten.
+**Letzter Merge:** PR #55 („Meine Leads" paginiert vollständig, D-034)
 
 ---
 
@@ -15,24 +14,6 @@
 **Setter-System läuft live.** Branding ist von „Hebammen-Vorsorge" auf neutrales „XI CRM" + dynamische berufsspezifische Texte (`{beruf_plural}-Vorsorge`) umgestellt. Cockpit, Lead-Liste, Termin-Bestätigung, Mail-/WhatsApp-Vorlagen, Rangliste, Lead-Verteilung — alles fertig.
 
 **22 PRs in dieser Session** wurden gemerged und sind in `main`.
-
----
-
-## 🔴 Nicht gemergte Änderung — direkte Anweisung
-
-> **Diese Änderung ist fertig, getestet und gepusht, aber NOCH NICHT in `main`/Production.** Sie liegt als **Draft-PR #55** auf Branch `claude/sharp-ride-KluW2`. Bis zum Merge ist der Bug auf der Live-Seite weiterhin vorhanden.
-
-**Was:** „Meine Leads" (`app/setter/leads/page.tsx`) lädt zugewiesene Leads jetzt vollständig paginiert über `fetchAllRows()` (vorher nacktes `.select()` → max. 1000 Zeilen). → **D-034**
-
-**Warum dringend:** Setter mit >1000 Leads (Robert: 1.072) sahen ihre zuletzt zugewiesenen Berufe — u. a. **Doula** — nur im Cockpit, nicht unter „Meine Leads". Reiner Anzeige-/Auffindbarkeits-Bug, keine Datenänderung.
-
-**Status:** Draft, `npx tsc --noEmit` ✅, CI grün, `mergeable_state: clean`. Preview deployed.
-
-**→ Konkrete Schritte (in dieser Reihenfolge):**
-1. **GitHub-Verbindung neu autorisieren** — das GitHub-MCP-OAuth-Token war am Session-Ende abgelaufen (kein PAT nötig; Connector im Web-UI neu verbinden / Re-Auth-Banner klicken).
-2. **PR #55 auf der Preview prüfen:** als Robert einloggen → „Meine Leads" → Chip **„Doula"** muss erscheinen und seine 50 Doulas zeigen.
-3. **PR #55 aus Draft holen** (Ready for review) **und mergen** (Squash, D-005). Nach Vercel-Prod-Deploy ist der Fix live.
-4. **Optional/Folgearbeit:** Cockpit-`berufAggregate` ebenfalls auf `fetchAllRows()` umziehen (Chip-Counts bei >1000 Leads, siehe D-034 „Noch offen").
 
 ---
 
@@ -120,7 +101,8 @@ Wer einen geschützten Lead wirklich löschen will, muss zuerst den Status ände
 ## ✅ Was zuletzt fertig gemacht wurde
 
 **Aktuelle Session (Juni 2026) — Code:**
-- **PR #55 (NOCH OFFEN, Draft)** — „Meine Leads" paginiert vollständig via `fetchAllRows()`. → D-034. Siehe „🔴 Nicht gemergte Änderung" oben.
+- **PR #55 (GEMERGED, Juni 2026)** — „Meine Leads" paginiert vollständig via `fetchAllRows()`. → D-034.
+- **Folge-PR zu #55** — Cockpit-`berufAggregate` (Chip-Counts) ebenfalls auf `fetchAllRows()` umgezogen + Docs auf Post-Merge-Stand.
 
 **Aktuelle Session (Juni 2026) — Datenoperationen (live, kein Code):**
 - **Doula** „Doula Direktkontakt" (186) importiert → Nicholas; später Bestand **215 Doulas** umverteilt: Nicholas 65 / Lisa 100 / Robert 50.
@@ -228,7 +210,7 @@ Unzugeordneter Pool ~5.595 (inkl. „Ernährungsberater 2. Wahl" 611, Kosmetiker
 | **B3: Setter-Anzeigenamen ≠ E-Mail** | „Lisa Becker" → natascha.lehmann@… — evtl. bewusste Anruf-Pseudonyme | Mit User klären, dann ggf. `PATCH profiles` |
 
 *Vorher gelistet, inzwischen behoben:*
-- ~~„Meine Leads" zeigt bei >1000 Leads die hinteren Berufe (z. B. Doula) nicht~~ — **Fix fertig in PR #55 (D-034), aber NOCH NICHT GEMERGED** → bis Merge auf Production weiterhin vorhanden.
+- ~~„Meine Leads" zeigt bei >1000 Leads die hinteren Berufe (z. B. Doula) nicht~~ — gelöst in PR #55 (D-034), gemerged Juni 2026; Cockpit-Chip-Counts im Folge-PR.
 - ~~Anruf-Status geht bei App-Close verloren~~ — gelöst in PR #49 (D-030): keepalive-Endpoint.
 - ~~Cockpit startet beim Reopen oben~~ — gelöst in PR #50 (D-031): Position gemerkt.
 - ~~Termin nicht als „stattgefunden" bestätigbar~~ — gelöst in PR #51 (D-032).
@@ -244,7 +226,6 @@ Unzugeordneter Pool ~5.595 (inkl. „Ernährungsberater 2. Wahl" 611, Kosmetiker
 
 ## 🚀 Empfohlene nächste Schritte (priorisiert)
 
-0. **PR #55 mergen** (GitHub re-auth → Preview prüfen → Ready → Squash-Merge) → „Meine Leads"-Bug ist live behoben. Siehe „🔴 Nicht gemergte Änderung" oben.
 1. **Supabase-SQLs einspielen** (siehe oben, 5 Min) → Stats werden zuverlässig
 2. **Cleanup-SQL für Stats laufen lassen** (Reset-Button oder SQL aus Chat) → alle starten bei 0
 3. **Optional: Bekannte Schwachstellen #1 und #2 fixen** (Undo + Call-Statistik) → komplett konsistente Statistik
