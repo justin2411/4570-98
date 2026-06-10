@@ -1,8 +1,14 @@
 # PROJECT.md — Was bisher gebaut wurde
 
-Lebendes Protokoll. Letzte Aktualisierung: **Mai 2026** (Stand nach PR #51).
+Lebendes Protokoll. Letzte Aktualisierung: **Juni 2026** (Stand: PR #51 gemerged, **PR #55 offen/Draft**).
 
 Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via Vercel. Drei Rollen: **Admin**, **Setter**, **Closer/Advisor**.
+
+---
+
+## 🔴 Offen, nicht in `main` (PR #55, Draft)
+
+- ⏳ **„Meine Leads" paginiert vollständig** (D-034) — `app/setter/leads/page.tsx` lädt zugewiesene Leads über `fetchAllRows()` statt nacktem `.select()`. Behebt: Setter mit >1000 Leads (Robert: 1.072) sahen zuletzt zugewiesene Berufe (Doula) nur im Cockpit, nicht unter „Meine Leads". **Fertig + getestet (tsc ✅, CI grün), aber noch nicht gemerged** — bis Merge auf Production weiterhin vorhanden. Details + Anweisung: `HANDOVER.md` → „🔴 Nicht gemergte Änderung".
 
 ---
 
