@@ -1,16 +1,15 @@
 # PROJECT.md — Was bisher gebaut wurde
 
-Lebendes Protokoll. Letzte Aktualisierung: **Juni 2026** (Stand: PR #51 gemerged, **PR #55 offen/Draft**).
+Lebendes Protokoll. Letzte Aktualisierung: **Juni 2026** (Stand: PR #55 gemerged).
 
 Das CRM (`leadbooking-crm/`) ist eine Next.js 14 App auf Supabase, deployt via Vercel. Drei Rollen: **Admin**, **Setter**, **Closer/Advisor**.
 
 ---
 
-## 🔴 Offen, nicht in `main` (PR #55, Draft)
+## 📍 Zwischenstand — Juni 2026 (post #55)
 
-- ⏳ **„Meine Leads" paginiert vollständig** (D-034) — `app/setter/leads/page.tsx` lädt zugewiesene Leads über `fetchAllRows()` statt nacktem `.select()`. Behebt: Setter mit >1000 Leads (Robert: 1.072) sahen zuletzt zugewiesene Berufe (Doula) nur im Cockpit, nicht unter „Meine Leads". **Fertig + getestet (tsc ✅, CI grün), aber noch nicht gemerged** — bis Merge auf Production weiterhin vorhanden. Details + Anweisung: `HANDOVER.md` → „🔴 Nicht gemergte Änderung".
-
----
+- ✅ **„Meine Leads" paginiert vollständig** (D-034, PR #55) — `app/setter/leads/page.tsx` lädt zugewiesene Leads über `fetchAllRows()` statt nacktem `.select()`. Behebt: Setter mit >1000 Leads (Robert: 1.072) sahen zuletzt zugewiesene Berufe (Doula) nur im Cockpit, nicht unter „Meine Leads".
+- ✅ **Cockpit-Chip-Counts vollständig** (Folge-PR zu D-034) — `berufAggregate` in `app/setter/cockpit/page.tsx` lädt jetzt ebenfalls über `fetchAllRows()`; Counts stimmen auch bei >1000 offenen Leads.
 
 ## 📍 Zwischenstand — Mai 2026 (post #51)
 

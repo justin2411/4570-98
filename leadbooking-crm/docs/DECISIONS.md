@@ -431,6 +431,6 @@ Warum etwas so ist, wie es ist. Wenn eine Entscheidung später revidiert wird �
 
 **Warum:** D-028 hatte den PostgREST-1000-Zeilen-Deckel an den Aggregations-/Verteilungs-Stellen geschlossen, **diese Setter-Seite aber übersehen.** Setter mit >1000 zugewiesenen Leads (live bestätigt: Robert mit 1.072) verloren still die hinteren Einträge. Konkret tauchten zuletzt zugewiesene Berufe (z. B. **Doula**) nur im **Cockpit** auf — das die Leads direkt per `.eq('beruf', …)` lädt — aber nicht unter „Meine Leads", weil dort die **Beruf-Filter-Chips aus den geladenen Leads** gebaut werden. Fehlt der Chip, sind die Leads für den Setter unauffindbar.
 
-**Noch offen (gleiche Wurzel):** Im Cockpit baut `berufAggregate` (`select('beruf').eq('assigned_to', …)` in `app/setter/cockpit/page.tsx`) die Chip-**Counts** ebenfalls aus max. 1000 Zeilen. Relevant erst bei >1000 Leads und nur für die angezeigte Zahl — die Leads selbst werden beruf-gefiltert geladen und sind nicht betroffen. Bei Gelegenheit auf `fetchAllRows()` umziehen.
+**Folgearbeit (gleiche Wurzel, ebenfalls erledigt):** Im Cockpit baute `berufAggregate` (`select('beruf').eq('assigned_to', …)` in `app/setter/cockpit/page.tsx`) die Chip-**Counts** ebenfalls aus max. 1000 Zeilen — bei Settern mit >1000 offenen Leads waren die angezeigten Zahlen zu niedrig. Ebenfalls auf `fetchAllRows()` umgezogen (Folge-PR zu #55).
 
-**Status:** **PR #55 — NOCH NICHT GEMERGED** (Draft, CI grün, `mergeable_state: clean`). Geht erst mit Merge + Vercel-Prod-Deploy live. Branch `claude/sharp-ride-KluW2`.
+**Status:** Live — PR #55 gemerged (Juni 2026), Cockpit-Chip-Counts im Folge-PR direkt danach.

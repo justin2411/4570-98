@@ -7,6 +7,7 @@ import type { Lead, Profile } from '@/types'
 import { getLeadProbabilityScorer } from '@/lib/lead-probability'
 import { filterBlacklistedLeads } from '@/lib/blacklist'
 import { isHandyLead } from '@/lib/handy-check'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export default async function CockpitPage({ searchParams }: { searchParams: Promise<{ beruf?: string; handy?: string; prio?: string }> }) {
   const supabase = await createClient()
@@ -47,7 +48,7 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     { data: clusterContent },
     { data: wiedervorlagen },
     { data: neueLeads },
-    { data: berufAggregate },
+    berufAggregate,
     { count: prioCount },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
@@ -55,9 +56,15 @@ export default async function CockpitPage({ searchParams }: { searchParams: Prom
     applyScopeFilters(wiedervorlagenQ as any),
     applyScopeFilters(neueQ as any),
     // Counts pro Beruf — alle offenen Leads des Setters, unabhängig vom Filter.
-    supabase.from('leads').select('beruf')
-      .eq('assigned_to', user.id)
-      .in('status', ['neu', 'angerufen', 'wiedervorlage']),
+    // Paginiert via fetchAllRows (D-028/D-034): ein nacktes .select() liefert
+    // max. 1000 Zeilen — bei Settern mit >1000 offenen Leads wären die
+    // Chip-Counts sonst zu niedrig.
+    fetchAllRows<{ beruf: string | null }>((from, to) =>
+      supabase.from('leads').select('beruf')
+        .eq('assigned_to', user.id)
+        .in('status', ['neu', 'angerufen', 'wiedervorlage'])
+        .order('id').range(from, to),
+    ),
     // High-Potential-Count
     supabase.from('leads').select('id', { count: 'exact', head: true })
       .eq('assigned_to', user.id)
